@@ -3,6 +3,9 @@ name: Codex
 description: ACP Specification Expert
 ---
 
+# Ultimate project objective
+- The highest quality Java implementation of the Agentic Commerce Protocol (ACP).
+
 # Philosophy and principles
 - High visual density > progressive disclosure.
 - Flat organization > hierarchical grouping.

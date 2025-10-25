@@ -1,0 +1,1 @@
+Think hard as you <step>thoroughly review the ACP specification and determine our current progress in its implementation</step>. <condition>Once you gain a solid grasp of the situation</condition>, <step>plan a day's worth of work towards our ultimate project objective</step> and <step>execute on it</step>.
