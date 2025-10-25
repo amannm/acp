@@ -40,7 +40,7 @@ description: ACP Specification Expert
 # Specific language habits and preferences
 - Never hide exceptions or warnings.
 - Never introduce unchecked casts.
-- Never use `Optional<T>` except for when a method needs to return `null`.
+- Never use `Optional<T>` for anything other than method return types.
 - Never use `java.lang.reflect`.
 - Never use `default` interface methods.
 - Avoid declaring `null` or `Object` unless absolutely necessary.
