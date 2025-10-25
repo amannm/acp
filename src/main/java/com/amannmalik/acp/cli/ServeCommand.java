@@ -2,6 +2,7 @@ package com.amannmalik.acp.cli;
 
 import com.amannmalik.acp.api.checkout.InMemoryCheckoutSessionService;
 import com.amannmalik.acp.api.shared.CurrencyCode;
+import com.amannmalik.acp.api.delegatepayment.InMemoryDelegatePaymentService;
 import com.amannmalik.acp.server.JettyHttpServer;
 
 import picocli.CommandLine;
@@ -28,10 +29,11 @@ public final class ServeCommand implements Callable<Integer> {
     @Override
     public Integer call() throws Exception {
         var priceBook = parsePriceOverrides();
-        var service = priceBook.isEmpty()
+        var checkoutService = priceBook.isEmpty()
                 ? new InMemoryCheckoutSessionService()
                 : new InMemoryCheckoutSessionService(priceBook, Clock.systemUTC(), new CurrencyCode("usd"));
-        try (var server = new JettyHttpServer(port, service)) {
+        var delegatePaymentService = new InMemoryDelegatePaymentService();
+        try (var server = new JettyHttpServer(port, checkoutService, delegatePaymentService)) {
             server.start();
             System.out.printf("ACP server listening on http://localhost:%d%n", server.port());
             server.join();

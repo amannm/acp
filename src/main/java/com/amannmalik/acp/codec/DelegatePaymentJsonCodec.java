@@ -56,6 +56,10 @@ public final class DelegatePaymentJsonCodec {
     }
 
     private static PaymentMethodCard mapPaymentMethod(JsonObject object) {
+        var type = JsonSupport.requireString(object, "type");
+        if (!"card".equals(type)) {
+            throw new JsonDecodingException("payment_method.type MUST be \"card\"");
+        }
         var cardNumberType = PaymentMethodCard.CardNumberType.valueOf(
                 JsonSupport.requireString(object, "card_number_type").toUpperCase());
         List<PaymentMethodCard.Check> checks;
@@ -67,9 +71,7 @@ public final class DelegatePaymentJsonCodec {
         } else {
             checks = List.of();
         }
-        Map<String, String> metadata = object.containsKey("metadata")
-                ? mapMetadata(object.getJsonObject("metadata"))
-                : Map.of();
+        Map<String, String> metadata = mapMetadata(JsonSupport.requireObject(object, "metadata"));
         return new PaymentMethodCard(
                 cardNumberType,
                 object.getBoolean("virtual"),

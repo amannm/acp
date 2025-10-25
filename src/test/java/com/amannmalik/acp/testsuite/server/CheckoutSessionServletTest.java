@@ -1,6 +1,7 @@
 package com.amannmalik.acp.testsuite.server;
 
 import com.amannmalik.acp.api.checkout.InMemoryCheckoutSessionService;
+import com.amannmalik.acp.api.delegatepayment.InMemoryDelegatePaymentService;
 import com.amannmalik.acp.api.shared.ApiVersion;
 import com.amannmalik.acp.server.JettyHttpServer;
 
@@ -20,7 +21,7 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 final class CheckoutSessionServletTest {
     @Test
     void createAndRetrieveSession() throws Exception {
-        try (var server = new JettyHttpServer(0, new InMemoryCheckoutSessionService())) {
+        try (var server = new JettyHttpServer(0, new InMemoryCheckoutSessionService(), new InMemoryDelegatePaymentService())) {
             server.start();
             var client = HttpClient.newHttpClient();
             var baseUri = URI.create("http://localhost:" + server.port());

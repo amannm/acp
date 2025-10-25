@@ -10,6 +10,8 @@ module acp.main {
     exports com.amannmalik.acp.cli;
     exports com.amannmalik.acp.api.checkout;
     exports com.amannmalik.acp.api.checkout.model;
+    exports com.amannmalik.acp.api.delegatepayment;
+    exports com.amannmalik.acp.api.delegatepayment.model;
     exports com.amannmalik.acp.api.shared;
     exports com.amannmalik.acp.server;
     exports com.amannmalik.acp.util;

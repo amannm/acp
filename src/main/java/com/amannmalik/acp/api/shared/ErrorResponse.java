@@ -6,6 +6,7 @@ public record ErrorResponse(ErrorType type, String code, String message, String 
     public enum ErrorType {
         INVALID_REQUEST,
         REQUEST_NOT_IDEMPOTENT,
+        RATE_LIMIT_EXCEEDED,
         PROCESSING_ERROR,
         SERVICE_UNAVAILABLE
     }
