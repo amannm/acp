@@ -33,6 +33,7 @@ import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ConcurrentMap;
 import java.util.concurrent.atomic.AtomicLong;
 import java.util.concurrent.atomic.AtomicReference;
+import java.util.function.ToLongFunction;
 import java.util.stream.Collectors;
 
 public final class InMemoryCheckoutSessionService implements CheckoutSessionService {
@@ -286,7 +287,7 @@ public final class InMemoryCheckoutSessionService implements CheckoutSessionServ
                 new Total(Total.TotalType.TOTAL, "Total", new MinorUnitAmount(total)));
     }
 
-    private static long sum(List<LineItem> lineItems, java.util.function.ToLongFunction<LineItem> mapper) {
+    private static long sum(List<LineItem> lineItems, ToLongFunction<LineItem> mapper) {
         return lineItems.stream().mapToLong(mapper).sum();
     }
 

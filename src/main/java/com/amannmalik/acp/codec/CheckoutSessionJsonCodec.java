@@ -9,6 +9,7 @@ import com.amannmalik.acp.api.checkout.model.FulfillmentOption;
 import com.amannmalik.acp.api.checkout.model.FulfillmentOptionId;
 import com.amannmalik.acp.api.checkout.model.Item;
 import com.amannmalik.acp.api.checkout.model.LineItem;
+import com.amannmalik.acp.api.checkout.model.Link;
 import com.amannmalik.acp.api.checkout.model.Message;
 import com.amannmalik.acp.api.checkout.model.Order;
 import com.amannmalik.acp.api.checkout.model.PaymentData;
@@ -16,6 +17,7 @@ import com.amannmalik.acp.api.checkout.model.PaymentProvider;
 import com.amannmalik.acp.api.checkout.model.Total;
 import com.amannmalik.acp.api.shared.ErrorResponse;
 
+import com.amannmalik.acp.api.shared.MinorUnitAmount;
 import jakarta.json.Json;
 import jakarta.json.JsonArray;
 import jakarta.json.JsonArrayBuilder;
@@ -26,6 +28,7 @@ import jakarta.json.JsonValue;
 
 import java.io.InputStream;
 import java.io.OutputStream;
+import java.time.Instant;
 import java.util.List;
 
 /// See specification/2025-09-29/spec/openapi/openapi.agentic_checkout.yaml
@@ -170,37 +173,37 @@ public final class CheckoutSessionJsonCodec {
     private static JsonArrayBuilder writeFulfillmentOptions(List<FulfillmentOption> options) {
         var builder = Json.createArrayBuilder();
         for (var option : options) {
-            if (option instanceof FulfillmentOption.Shipping shipping) {
+            if (option instanceof FulfillmentOption.Shipping(String id, String title, String subtitle, String carrier, Instant earliestDeliveryTime, Instant latestDeliveryTime, MinorUnitAmount subtotal, MinorUnitAmount tax, MinorUnitAmount total)) {
                 var json = Json.createObjectBuilder()
                         .add("type", "shipping")
-                        .add("id", shipping.id())
-                        .add("title", shipping.title())
-                        .add("subtotal", shipping.subtotal().value())
-                        .add("tax", shipping.tax().value())
-                        .add("total", shipping.total().value());
-                if (shipping.subtitle() != null) {
-                    json.add("subtitle", shipping.subtitle());
+                        .add("id", id)
+                        .add("title", title)
+                        .add("subtotal", subtotal.value())
+                        .add("tax", tax.value())
+                        .add("total", total.value());
+                if (subtitle != null) {
+                    json.add("subtitle", subtitle);
                 }
-                if (shipping.carrier() != null) {
-                    json.add("carrier", shipping.carrier());
+                if (carrier != null) {
+                    json.add("carrier", carrier);
                 }
-                if (shipping.earliestDeliveryTime() != null) {
-                    json.add("earliest_delivery_time", shipping.earliestDeliveryTime().toString());
+                if (earliestDeliveryTime != null) {
+                    json.add("earliest_delivery_time", earliestDeliveryTime.toString());
                 }
-                if (shipping.latestDeliveryTime() != null) {
-                    json.add("latest_delivery_time", shipping.latestDeliveryTime().toString());
+                if (latestDeliveryTime != null) {
+                    json.add("latest_delivery_time", latestDeliveryTime.toString());
                 }
                 builder.add(json);
-            } else if (option instanceof FulfillmentOption.Digital digital) {
+            } else if (option instanceof FulfillmentOption.Digital(String id, String title, String subtitle, MinorUnitAmount subtotal, MinorUnitAmount tax, MinorUnitAmount total)) {
                 var json = Json.createObjectBuilder()
                         .add("type", "digital")
-                        .add("id", digital.id())
-                        .add("title", digital.title())
-                        .add("subtotal", digital.subtotal().value())
-                        .add("tax", digital.tax().value())
-                        .add("total", digital.total().value());
-                if (digital.subtitle() != null) {
-                    json.add("subtitle", digital.subtitle());
+                        .add("id", id)
+                        .add("title", title)
+                        .add("subtotal", subtotal.value())
+                        .add("tax", tax.value())
+                        .add("total", total.value());
+                if (subtitle != null) {
+                    json.add("subtitle", subtitle);
                 }
                 builder.add(json);
             }
@@ -222,23 +225,23 @@ public final class CheckoutSessionJsonCodec {
     private static JsonArrayBuilder writeMessages(List<Message> messages) {
         var builder = Json.createArrayBuilder();
         for (var message : messages) {
-            if (message instanceof Message.Info info) {
+            if (message instanceof Message.Info(String param, Message.ContentType contentType, String content)) {
                 var json = Json.createObjectBuilder()
                         .add("type", "info")
-                        .add("content_type", info.contentType().name().toLowerCase())
-                        .add("content", info.content());
-                if (info.param() != null) {
-                    json.add("param", info.param());
+                        .add("content_type", contentType.name().toLowerCase())
+                        .add("content", content);
+                if (param != null) {
+                    json.add("param", param);
                 }
                 builder.add(json);
-            } else if (message instanceof Message.Error error) {
+            } else if (message instanceof Message.Error(Message.ErrorCode code, String param, Message.ContentType contentType, String content)) {
                 var json = Json.createObjectBuilder()
                         .add("type", "error")
-                        .add("code", error.code().name().toLowerCase())
-                        .add("content_type", error.contentType().name().toLowerCase())
-                        .add("content", error.content());
-                if (error.param() != null) {
-                    json.add("param", error.param());
+                        .add("code", code.name().toLowerCase())
+                        .add("content_type", contentType.name().toLowerCase())
+                        .add("content", content);
+                if (param != null) {
+                    json.add("param", param);
                 }
                 builder.add(json);
             }
@@ -246,7 +249,7 @@ public final class CheckoutSessionJsonCodec {
         return builder;
     }
 
-    private static JsonArrayBuilder writeLinks(List<com.amannmalik.acp.api.checkout.model.Link> links) {
+    private static JsonArrayBuilder writeLinks(List<Link> links) {
         var builder = Json.createArrayBuilder();
         for (var link : links) {
             builder.add(Json.createObjectBuilder()

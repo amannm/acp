@@ -113,7 +113,7 @@ public final class DelegatePaymentJsonCodec {
     private static Map<String, String> mapMetadata(JsonObject object) {
         var map = new LinkedHashMap<String, String>();
         for (var entry : object.entrySet()) {
-            if (entry.getValue().getValueType() != jakarta.json.JsonValue.ValueType.STRING) {
+            if (entry.getValue().getValueType() != JsonValue.ValueType.STRING) {
                 throw new JsonDecodingException("metadata values MUST be strings");
             }
             map.put(entry.getKey(), object.getString(entry.getKey()));

@@ -8,6 +8,9 @@ import com.amannmalik.acp.codec.DelegatePaymentJsonCodec;
 import org.eclipse.jetty.ee10.servlet.ServletContextHandler;
 import org.eclipse.jetty.ee10.servlet.ServletHolder;
 import org.eclipse.jetty.server.Server;
+import org.eclipse.jetty.server.ServerConnector;
+
+import java.util.Arrays;
 
 public final class JettyHttpServer implements AutoCloseable {
     private final Server server;
@@ -37,11 +40,11 @@ public final class JettyHttpServer implements AutoCloseable {
     }
 
     public int port() {
-        return java.util.Arrays.stream(server.getConnectors())
-                .filter(connector -> connector instanceof org.eclipse.jetty.server.ServerConnector)
-                .map(connector -> (org.eclipse.jetty.server.ServerConnector) connector)
+        return Arrays.stream(server.getConnectors())
+                .filter(connector -> connector instanceof ServerConnector)
+                .map(connector -> (ServerConnector) connector)
                 .findFirst()
-                .map(org.eclipse.jetty.server.ServerConnector::getLocalPort)
+                .map(ServerConnector::getLocalPort)
                 .orElseThrow();
     }
 

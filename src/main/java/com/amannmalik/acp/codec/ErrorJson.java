@@ -5,6 +5,7 @@ import com.amannmalik.acp.api.shared.ErrorResponse;
 import jakarta.json.Json;
 import jakarta.json.JsonObjectBuilder;
 
+import java.io.IOException;
 import java.io.OutputStream;
 import java.io.OutputStreamWriter;
 import java.io.UncheckedIOException;
@@ -32,7 +33,7 @@ final class ErrorJson {
     static void writeObject(JsonObjectBuilder builder, OutputStream stream) {
         try (Writer writer = new OutputStreamWriter(stream, StandardCharsets.UTF_8)) {
             Json.createWriter(writer).write(builder.build());
-        } catch (java.io.IOException e) {
+        } catch (IOException e) {
             throw new UncheckedIOException(e);
         }
     }
