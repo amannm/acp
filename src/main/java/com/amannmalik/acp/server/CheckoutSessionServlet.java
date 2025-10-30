@@ -12,6 +12,7 @@ import com.amannmalik.acp.api.shared.ApiVersion;
 import com.amannmalik.acp.api.shared.ErrorResponse;
 import com.amannmalik.acp.codec.CheckoutSessionJsonCodec;
 import com.amannmalik.acp.codec.JsonDecodingException;
+import com.amannmalik.acp.server.security.RequestAuthenticator;
 
 import jakarta.servlet.ServletException;
 import jakarta.servlet.http.HttpServlet;
@@ -28,10 +29,13 @@ public final class CheckoutSessionServlet extends HttpServlet {
 
     private final CheckoutSessionService service;
     private final CheckoutSessionJsonCodec codec;
+    private final RequestAuthenticator authenticator;
 
-    public CheckoutSessionServlet(CheckoutSessionService service, CheckoutSessionJsonCodec codec) {
+    public CheckoutSessionServlet(
+            CheckoutSessionService service, CheckoutSessionJsonCodec codec, RequestAuthenticator authenticator) {
         this.service = service;
         this.codec = codec;
+        this.authenticator = authenticator;
     }
 
     @Override
@@ -40,8 +44,10 @@ public final class CheckoutSessionServlet extends HttpServlet {
             validateHeaders(req);
             var segments = pathSegments(req);
             if (segments.isEmpty()) {
+                var body = readBody(req);
+                authenticator.authenticate(req, body);
                 requireJsonPayload(req);
-                var request = codec.readCreateRequest(req.getInputStream());
+                var request = codec.readCreateRequest(new java.io.ByteArrayInputStream(body));
                 var session = service.create(request, normalizeHeader(req.getHeader("Idempotency-Key")));
                 resp.setStatus(HttpServletResponse.SC_CREATED);
                 propagateCorrelationHeaders(req, resp);
@@ -51,8 +57,10 @@ public final class CheckoutSessionServlet extends HttpServlet {
             }
             var sessionId = new CheckoutSessionId(segments.get(0));
             if (segments.size() == 1) {
+                var body = readBody(req);
+                authenticator.authenticate(req, body);
                 requireJsonPayload(req);
-                var request = codec.readUpdateRequest(req.getInputStream());
+                var request = codec.readUpdateRequest(new java.io.ByteArrayInputStream(body));
                 var session = service.update(sessionId, request);
                 resp.setStatus(HttpServletResponse.SC_OK);
                 propagateCorrelationHeaders(req, resp);
@@ -62,8 +70,10 @@ public final class CheckoutSessionServlet extends HttpServlet {
             }
             var action = segments.get(1);
             if ("complete".equals(action)) {
+                var body = readBody(req);
+                authenticator.authenticate(req, body);
                 requireJsonPayload(req);
-                var request = codec.readCompleteRequest(req.getInputStream());
+                var request = codec.readCompleteRequest(new java.io.ByteArrayInputStream(body));
                 var idempotencyKey = ensureIdempotencyKey(req);
                 var session = service.complete(sessionId, request, idempotencyKey);
                 resp.setStatus(HttpServletResponse.SC_OK);
@@ -73,6 +83,8 @@ public final class CheckoutSessionServlet extends HttpServlet {
                 return;
             }
             if ("cancel".equals(action)) {
+                var body = readBody(req);
+                authenticator.authenticate(req, body);
                 var session = service.cancel(sessionId);
                 resp.setStatus(HttpServletResponse.SC_OK);
                 propagateCorrelationHeaders(req, resp);
@@ -88,6 +100,8 @@ public final class CheckoutSessionServlet extends HttpServlet {
     protected void doGet(HttpServletRequest req, HttpServletResponse resp) throws ServletException, IOException {
         handleWithErrors(req, resp, () -> {
             validateHeaders(req);
+            var body = readBody(req);
+            authenticator.authenticate(req, body);
             var segments = pathSegments(req);
             if (segments.size() != 1) {
                 resp.setStatus(HttpServletResponse.SC_NOT_FOUND);
@@ -229,6 +243,12 @@ public final class CheckoutSessionServlet extends HttpServlet {
         propagateCorrelationHeaders(req, resp);
         resp.setContentType(APPLICATION_JSON);
         codec.writeError(resp.getOutputStream(), new ErrorResponse(type, code, message, param));
+    }
+
+    private static byte[] readBody(HttpServletRequest request) throws IOException {
+        try (var inputStream = request.getInputStream()) {
+            return inputStream.readAllBytes();
+        }
     }
 
     private static List<String> pathSegments(HttpServletRequest req) {

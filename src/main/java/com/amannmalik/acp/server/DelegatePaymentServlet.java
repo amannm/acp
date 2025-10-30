@@ -8,6 +8,7 @@ import com.amannmalik.acp.api.shared.ApiVersion;
 import com.amannmalik.acp.api.shared.ErrorResponse;
 import com.amannmalik.acp.codec.DelegatePaymentJsonCodec;
 import com.amannmalik.acp.codec.JsonDecodingException;
+import com.amannmalik.acp.server.security.RequestAuthenticator;
 
 import jakarta.servlet.ServletException;
 import jakarta.servlet.http.HttpServlet;
@@ -22,10 +23,13 @@ public final class DelegatePaymentServlet extends HttpServlet {
 
     private final DelegatePaymentService service;
     private final DelegatePaymentJsonCodec codec;
+    private final RequestAuthenticator authenticator;
 
-    public DelegatePaymentServlet(DelegatePaymentService service, DelegatePaymentJsonCodec codec) {
+    public DelegatePaymentServlet(
+            DelegatePaymentService service, DelegatePaymentJsonCodec codec, RequestAuthenticator authenticator) {
         this.service = service;
         this.codec = codec;
+        this.authenticator = authenticator;
     }
 
     @Override
@@ -33,8 +37,10 @@ public final class DelegatePaymentServlet extends HttpServlet {
         handleWithErrors(req, resp, () -> {
             validateHeaders(req);
             requireJsonPayload(req);
+            var body = readBody(req);
+            authenticator.authenticate(req, body);
             var idempotencyKey = normalizeHeader(req.getHeader("Idempotency-Key"));
-            var delegateRequest = codec.readRequest(req.getInputStream());
+            var delegateRequest = codec.readRequest(new java.io.ByteArrayInputStream(body));
             var response = service.create(delegateRequest, idempotencyKey);
             resp.setStatus(HttpServletResponse.SC_CREATED);
             propagateCorrelationHeaders(req, resp);
@@ -156,6 +162,12 @@ public final class DelegatePaymentServlet extends HttpServlet {
         propagateCorrelationHeaders(req, resp);
         resp.setContentType(APPLICATION_JSON);
         codec.writeError(resp.getOutputStream(), new ErrorResponse(type, code, message, param));
+    }
+
+    private static byte[] readBody(HttpServletRequest request) throws IOException {
+        try (var inputStream = request.getInputStream()) {
+            return inputStream.readAllBytes();
+        }
     }
 
     private static void propagateCorrelationHeaders(HttpServletRequest req, HttpServletResponse resp) {

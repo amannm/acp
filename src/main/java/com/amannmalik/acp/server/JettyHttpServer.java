@@ -4,6 +4,7 @@ import com.amannmalik.acp.api.checkout.CheckoutSessionService;
 import com.amannmalik.acp.api.delegatepayment.DelegatePaymentService;
 import com.amannmalik.acp.codec.CheckoutSessionJsonCodec;
 import com.amannmalik.acp.codec.DelegatePaymentJsonCodec;
+import com.amannmalik.acp.server.security.RequestAuthenticator;
 
 import org.eclipse.jetty.ee10.servlet.ServletContextHandler;
 import org.eclipse.jetty.ee10.servlet.ServletHolder;
@@ -18,15 +19,18 @@ public final class JettyHttpServer implements AutoCloseable {
     public JettyHttpServer(
             int port,
             CheckoutSessionService checkoutSessionService,
-            DelegatePaymentService delegatePaymentService) {
+            DelegatePaymentService delegatePaymentService,
+            RequestAuthenticator requestAuthenticator) {
         var checkoutCodec = new CheckoutSessionJsonCodec();
         var delegateCodec = new DelegatePaymentJsonCodec();
         this.server = new Server(port);
         var context = new ServletContextHandler(ServletContextHandler.NO_SESSIONS);
         context.setContextPath("/");
-        context.addServlet(new ServletHolder(new CheckoutSessionServlet(checkoutSessionService, checkoutCodec)), "/checkout_sessions/*");
         context.addServlet(
-                new ServletHolder(new DelegatePaymentServlet(delegatePaymentService, delegateCodec)),
+                new ServletHolder(new CheckoutSessionServlet(checkoutSessionService, checkoutCodec, requestAuthenticator)),
+                "/checkout_sessions/*");
+        context.addServlet(
+                new ServletHolder(new DelegatePaymentServlet(delegatePaymentService, delegateCodec, requestAuthenticator)),
                 "/agentic_commerce/delegate_payment");
         server.setHandler(context);
     }

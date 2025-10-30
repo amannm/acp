@@ -14,6 +14,7 @@ module acp.main {
     exports com.amannmalik.acp.api.delegatepayment.model;
     exports com.amannmalik.acp.api.shared;
     exports com.amannmalik.acp.server;
+    exports com.amannmalik.acp.server.security;
     exports com.amannmalik.acp.util;
     exports com.amannmalik.acp.codec;
 }
