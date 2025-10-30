@@ -2,7 +2,7 @@ module acp.main {
     requires transitive info.picocli;
     requires transitive jakarta.json;
     requires transitive jakarta.servlet;
-    requires java.net.http;
+    requires transitive java.net.http;
     requires org.eclipse.jetty.ee10.servlet;
     requires org.eclipse.jetty.server;
     requires org.bouncycastle.provider;
@@ -15,6 +15,8 @@ module acp.main {
     exports com.amannmalik.acp.api.shared;
     exports com.amannmalik.acp.server;
     exports com.amannmalik.acp.server.security;
+    exports com.amannmalik.acp.server.webhook;
     exports com.amannmalik.acp.util;
     exports com.amannmalik.acp.codec;
+    exports com.amannmalik.acp.spi.webhook;
 }

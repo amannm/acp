@@ -1,4 +1,4 @@
-package com.amannmalik.acp.server.webhook;
+package com.amannmalik.acp.spi.webhook;
 
 import com.amannmalik.acp.util.Ensure;
 import java.net.URI;

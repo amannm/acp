@@ -1,4 +1,4 @@
-package com.amannmalik.acp.server.webhook;
+package com.amannmalik.acp.spi.webhook;
 
 public interface OrderWebhookPublisher {
     OrderWebhookPublisher NOOP = event -> {};

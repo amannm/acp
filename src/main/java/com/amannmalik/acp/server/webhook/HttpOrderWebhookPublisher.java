@@ -1,5 +1,7 @@
 package com.amannmalik.acp.server.webhook;
 
+import com.amannmalik.acp.spi.webhook.OrderWebhookEvent;
+import com.amannmalik.acp.spi.webhook.OrderWebhookPublisher;
 import com.amannmalik.acp.util.Ensure;
 
 import jakarta.json.Json;

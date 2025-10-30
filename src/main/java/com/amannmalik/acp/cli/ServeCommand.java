@@ -7,11 +7,15 @@ import com.amannmalik.acp.server.JettyHttpServer;
 import com.amannmalik.acp.server.security.ConfigurableRequestAuthenticator;
 import com.amannmalik.acp.server.security.RequestAuthenticator;
 import com.amannmalik.acp.server.security.SecurityConfiguration;
+import com.amannmalik.acp.server.webhook.HttpOrderWebhookPublisher;
+import com.amannmalik.acp.spi.webhook.OrderWebhookPublisher;
 
 import picocli.CommandLine;
 
 import java.time.Clock;
 import java.time.Duration;
+import java.net.URI;
+import java.net.http.HttpClient;
 import java.util.Base64;
 import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
@@ -50,12 +54,29 @@ public final class ServeCommand implements Callable<Integer> {
             description = "Maximum allowed request timestamp skew (ISO-8601). Default: ${DEFAULT-VALUE}")
     Duration maxTimestampSkew;
 
+    @CommandLine.Option(
+            names = "--webhook-endpoint",
+            description = "Order webhook endpoint URL (enables webhook publishing when provided)")
+    String webhookEndpoint;
+
+    @CommandLine.Option(
+            names = "--webhook-signature-key",
+            description = "Base64url secret used to sign webhook payloads")
+    String webhookSignatureKey;
+
+    @CommandLine.Option(
+            names = "--webhook-signature-header",
+            defaultValue = "Merchant-Signature",
+            description = "Header name used for webhook signatures (default: ${DEFAULT-VALUE})")
+    String webhookSignatureHeader;
+
     @Override
     public Integer call() throws Exception {
         var priceBook = parsePriceOverrides();
+        var orderPublisher = webhookPublisher();
         var checkoutService = priceBook.isEmpty()
-                ? new InMemoryCheckoutSessionService()
-                : new InMemoryCheckoutSessionService(priceBook, Clock.systemUTC(), new CurrencyCode("usd"));
+                ? new InMemoryCheckoutSessionService(orderPublisher)
+                : new InMemoryCheckoutSessionService(priceBook, Clock.systemUTC(), new CurrencyCode("usd"), orderPublisher);
         var delegatePaymentService = new InMemoryDelegatePaymentService();
         var authenticator = authenticator();
         try (var server = new JettyHttpServer(port, checkoutService, delegatePaymentService, authenticator)) {
@@ -125,6 +146,28 @@ public final class ServeCommand implements Callable<Integer> {
             return Base64.getUrlDecoder().decode(encoded);
         } catch (IllegalArgumentException e) {
             throw new IllegalArgumentException("Signature key MUST be base64url encoded", e);
+        }
+    }
+
+    private OrderWebhookPublisher webhookPublisher() {
+        if (webhookEndpoint == null && webhookSignatureKey == null) {
+            return OrderWebhookPublisher.NOOP;
+        }
+        if (webhookEndpoint == null || webhookSignatureKey == null) {
+            throw new IllegalArgumentException(
+                    "--webhook-endpoint and --webhook-signature-key MUST be provided together");
+        }
+        var endpointUri = parseUri(webhookEndpoint);
+        var secret = decodeSecret(webhookSignatureKey);
+        var client = HttpClient.newHttpClient();
+        return new HttpOrderWebhookPublisher(client, endpointUri, webhookSignatureHeader, secret, Clock.systemUTC());
+    }
+
+    private static URI parseUri(String value) {
+        try {
+            return URI.create(value);
+        } catch (IllegalArgumentException e) {
+            throw new IllegalArgumentException("Invalid webhook endpoint URI: " + value, e);
         }
     }
 }
