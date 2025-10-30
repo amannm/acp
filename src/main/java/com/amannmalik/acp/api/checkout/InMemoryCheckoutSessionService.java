@@ -1,36 +1,16 @@
 package com.amannmalik.acp.api.checkout;
 
-import com.amannmalik.acp.api.checkout.model.Address;
-import com.amannmalik.acp.api.checkout.model.Buyer;
-import com.amannmalik.acp.api.checkout.model.CheckoutSession;
-import com.amannmalik.acp.api.checkout.model.CheckoutSessionCompleteRequest;
-import com.amannmalik.acp.api.checkout.model.CheckoutSessionCreateRequest;
-import com.amannmalik.acp.api.checkout.model.CheckoutSessionId;
-import com.amannmalik.acp.api.checkout.model.CheckoutSessionStatus;
-import com.amannmalik.acp.api.checkout.model.CheckoutSessionUpdateRequest;
-import com.amannmalik.acp.api.checkout.model.FulfillmentOption;
-import com.amannmalik.acp.api.checkout.model.FulfillmentOptionId;
-import com.amannmalik.acp.api.checkout.model.Item;
-import com.amannmalik.acp.api.checkout.model.LineItem;
-import com.amannmalik.acp.api.checkout.model.Link;
-import com.amannmalik.acp.api.checkout.model.Message;
-import com.amannmalik.acp.api.checkout.model.Order;
-import com.amannmalik.acp.api.checkout.model.PaymentProvider;
-import com.amannmalik.acp.api.checkout.model.Total;
+import com.amannmalik.acp.api.checkout.model.*;
 import com.amannmalik.acp.api.shared.CurrencyCode;
 import com.amannmalik.acp.api.shared.MinorUnitAmount;
 import com.amannmalik.acp.spi.webhook.OrderWebhookEvent;
 import com.amannmalik.acp.spi.webhook.OrderWebhookPublisher;
+
 import java.math.BigDecimal;
 import java.math.RoundingMode;
 import java.net.URI;
-import java.time.Clock;
-import java.time.Duration;
-import java.time.Instant;
-import java.util.ArrayList;
-import java.util.List;
-import java.util.Map;
-import java.util.Objects;
+import java.time.*;
+import java.util.*;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ConcurrentMap;
 import java.util.concurrent.atomic.AtomicLong;
@@ -77,6 +57,37 @@ public final class InMemoryCheckoutSessionService implements CheckoutSessionServ
 
     public InMemoryCheckoutSessionService(OrderWebhookPublisher webhookPublisher) {
         this(defaultPriceBook(), Clock.systemUTC(), new CurrencyCode("usd"), webhookPublisher);
+    }
+
+    private static List<Item> extractItems(CheckoutSession session) {
+        return session.lineItems().stream().map(LineItem::item).collect(Collectors.toUnmodifiableList());
+    }
+
+    private static long sum(List<LineItem> lineItems, ToLongFunction<LineItem> mapper) {
+        return lineItems.stream().mapToLong(mapper).sum();
+    }
+
+    private static Map<String, Long> defaultPriceBook() {
+        return Map.of(
+                "item_123", 1500L,
+                "item_456", 3000L,
+                "item_789", 5000L);
+    }
+
+    private static OrderWebhookEvent.OrderStatus webhookStatusFor(CheckoutSessionStatus status) {
+        return switch (status) {
+            case COMPLETED -> OrderWebhookEvent.OrderStatus.CREATED;
+            case CANCELED -> OrderWebhookEvent.OrderStatus.CANCELED;
+            default -> throw new IllegalStateException("Unsupported checkout status for order webhook: " + status);
+        };
+    }
+
+    private static String normalizeIdempotencyKey(String key) {
+        if (key == null) {
+            return null;
+        }
+        var trimmed = key.trim();
+        return trimmed.isEmpty() ? null : trimmed;
     }
 
     @Override
@@ -212,10 +223,6 @@ public final class InMemoryCheckoutSessionService implements CheckoutSessionServ
                 order);
     }
 
-    private static List<Item> extractItems(CheckoutSession session) {
-        return session.lineItems().stream().map(LineItem::item).collect(Collectors.toUnmodifiableList());
-    }
-
     private List<LineItem> priceItems(List<Item> items) {
         var result = new ArrayList<LineItem>(items.size());
         for (var item : items) {
@@ -302,10 +309,6 @@ public final class InMemoryCheckoutSessionService implements CheckoutSessionServ
                 new Total(Total.TotalType.TOTAL, "Total", new MinorUnitAmount(total)));
     }
 
-    private static long sum(List<LineItem> lineItems, ToLongFunction<LineItem> mapper) {
-        return lineItems.stream().mapToLong(mapper).sum();
-    }
-
     private long fulfillmentTotal(List<FulfillmentOption> options, FulfillmentOptionId fulfillmentOptionId) {
         if (fulfillmentOptionId == null) {
             return 0L;
@@ -341,13 +344,6 @@ public final class InMemoryCheckoutSessionService implements CheckoutSessionServ
 
     private long priceForItem(String itemId) {
         return priceBook.getOrDefault(itemId, 1000L);
-    }
-
-    private static Map<String, Long> defaultPriceBook() {
-        return Map.of(
-                "item_123", 1500L,
-                "item_456", 3000L,
-                "item_789", 5000L);
     }
 
     private CheckoutSession createNewSession(CheckoutSessionCreateRequest request) {
@@ -407,25 +403,12 @@ public final class InMemoryCheckoutSessionService implements CheckoutSessionServ
         webhookPublisher.publish(event);
     }
 
-    private static OrderWebhookEvent.OrderStatus webhookStatusFor(CheckoutSessionStatus status) {
-        return switch (status) {
-            case COMPLETED -> OrderWebhookEvent.OrderStatus.CREATED;
-            case CANCELED -> OrderWebhookEvent.OrderStatus.CANCELED;
-            default -> throw new IllegalStateException("Unsupported checkout status for order webhook: " + status);
-        };
+    private record StoredCreateRequest(CheckoutSessionCreateRequest request, String sessionId) {
     }
 
-    private static String normalizeIdempotencyKey(String key) {
-        if (key == null) {
-            return null;
-        }
-        var trimmed = key.trim();
-        return trimmed.isEmpty() ? null : trimmed;
+    private record StoredCompleteRequest(CheckoutSessionCompleteRequest request) {
     }
 
-    private record StoredCreateRequest(CheckoutSessionCreateRequest request, String sessionId) {}
-
-    private record StoredCompleteRequest(CheckoutSessionCompleteRequest request) {}
-
-    private record CompleteIdempotencyKey(String sessionId, String idempotencyKey) {}
+    private record CompleteIdempotencyKey(String sessionId, String idempotencyKey) {
+    }
 }

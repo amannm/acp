@@ -1,30 +1,9 @@
 package com.amannmalik.acp.codec;
 
-import com.amannmalik.acp.api.checkout.model.Buyer;
-import com.amannmalik.acp.api.checkout.model.CheckoutSession;
-import com.amannmalik.acp.api.checkout.model.CheckoutSessionCompleteRequest;
-import com.amannmalik.acp.api.checkout.model.CheckoutSessionCreateRequest;
-import com.amannmalik.acp.api.checkout.model.CheckoutSessionUpdateRequest;
-import com.amannmalik.acp.api.checkout.model.FulfillmentOption;
-import com.amannmalik.acp.api.checkout.model.FulfillmentOptionId;
-import com.amannmalik.acp.api.checkout.model.Item;
-import com.amannmalik.acp.api.checkout.model.LineItem;
-import com.amannmalik.acp.api.checkout.model.Link;
-import com.amannmalik.acp.api.checkout.model.Message;
-import com.amannmalik.acp.api.checkout.model.Order;
-import com.amannmalik.acp.api.checkout.model.PaymentData;
-import com.amannmalik.acp.api.checkout.model.PaymentProvider;
-import com.amannmalik.acp.api.checkout.model.Total;
+import com.amannmalik.acp.api.checkout.model.*;
 import com.amannmalik.acp.api.shared.ErrorResponse;
-
 import com.amannmalik.acp.api.shared.MinorUnitAmount;
-import jakarta.json.Json;
-import jakarta.json.JsonArray;
-import jakarta.json.JsonArrayBuilder;
-import jakarta.json.JsonObject;
-import jakarta.json.JsonObjectBuilder;
-import jakarta.json.JsonReader;
-import jakarta.json.JsonValue;
+import jakarta.json.*;
 
 import java.io.InputStream;
 import java.io.OutputStream;
@@ -33,66 +12,6 @@ import java.util.List;
 
 /// See specification/2025-09-29/spec/openapi/openapi.agentic_checkout.yaml
 public final class CheckoutSessionJsonCodec {
-    public CheckoutSessionCreateRequest readCreateRequest(InputStream body) {
-        var root = readObject(body);
-        var items = mapItemsArray(JsonSupport.requireArray(root, "items"));
-        var buyer = readBuyerOrNull(root, "buyer");
-        var fulfillmentAddress = AddressJson.readOptional(root, "fulfillment_address");
-        return new CheckoutSessionCreateRequest(items, buyer, fulfillmentAddress);
-    }
-
-    public CheckoutSessionUpdateRequest readUpdateRequest(InputStream body) {
-        var root = readObject(body);
-        List<Item> items = root.containsKey("items")
-                ? mapItemsArray(root.getJsonArray("items"))
-                : null;
-        var buyer = readBuyerOrNull(root, "buyer");
-        var fulfillmentAddress = AddressJson.readOptional(root, "fulfillment_address");
-        FulfillmentOptionId fulfillmentOptionId = root.containsKey("fulfillment_option_id")
-                ? new FulfillmentOptionId(JsonSupport.requireString(root, "fulfillment_option_id"))
-                : null;
-        return new CheckoutSessionUpdateRequest(items, buyer, fulfillmentAddress, fulfillmentOptionId);
-    }
-
-    public CheckoutSessionCompleteRequest readCompleteRequest(InputStream body) {
-        var root = readObject(body);
-        var buyer = readBuyerOrNull(root, "buyer");
-        var paymentData = mapPaymentData(JsonSupport.requireObject(root, "payment_data"));
-        return new CheckoutSessionCompleteRequest(buyer, paymentData);
-    }
-
-    public void writeCheckoutSession(OutputStream outputStream, CheckoutSession session) {
-        var builder = Json.createObjectBuilder();
-        builder.add("id", session.id().value());
-        if (session.buyer() != null) {
-            builder.add("buyer", writeBuyer(session.buyer()));
-        }
-        if (session.paymentProvider() != null) {
-            builder.add("payment_provider", writePaymentProvider(session.paymentProvider()));
-        }
-        builder.add("status", session.status().name().toLowerCase());
-        builder.add("currency", session.currency().value());
-        builder.add("line_items", writeLineItems(session.lineItems()));
-        if (session.fulfillmentAddress() != null) {
-            builder.add("fulfillment_address", AddressJson.write(session.fulfillmentAddress()));
-        }
-        builder.add("fulfillment_options", writeFulfillmentOptions(session.fulfillmentOptions()));
-        if (session.fulfillmentOptionId() != null) {
-            builder.add("fulfillment_option_id", session.fulfillmentOptionId().value());
-        }
-        builder.add("totals", writeTotals(session.totals()));
-        builder.add("messages", writeMessages(session.messages()));
-        builder.add("links", writeLinks(session.links()));
-        if (session.order() != null) {
-            builder.add("order", writeOrder(session.order()));
-        }
-        ErrorJson.writeObject(builder, outputStream);
-    }
-
-    public void writeError(OutputStream outputStream, ErrorResponse error) {
-        ErrorJson.write(outputStream, error);
-    }
-
     private static JsonObject readObject(InputStream body) {
         try (JsonReader reader = Json.createReader(body)) {
             return reader.readObject();
@@ -271,5 +190,65 @@ public final class CheckoutSessionJsonCodec {
                 .map(JsonValue::asJsonObject)
                 .map(CheckoutSessionJsonCodec::mapItem)
                 .toList();
+    }
+
+    public CheckoutSessionCreateRequest readCreateRequest(InputStream body) {
+        var root = readObject(body);
+        var items = mapItemsArray(JsonSupport.requireArray(root, "items"));
+        var buyer = readBuyerOrNull(root, "buyer");
+        var fulfillmentAddress = AddressJson.readOptional(root, "fulfillment_address");
+        return new CheckoutSessionCreateRequest(items, buyer, fulfillmentAddress);
+    }
+
+    public CheckoutSessionUpdateRequest readUpdateRequest(InputStream body) {
+        var root = readObject(body);
+        List<Item> items = root.containsKey("items")
+                ? mapItemsArray(root.getJsonArray("items"))
+                : null;
+        var buyer = readBuyerOrNull(root, "buyer");
+        var fulfillmentAddress = AddressJson.readOptional(root, "fulfillment_address");
+        FulfillmentOptionId fulfillmentOptionId = root.containsKey("fulfillment_option_id")
+                ? new FulfillmentOptionId(JsonSupport.requireString(root, "fulfillment_option_id"))
+                : null;
+        return new CheckoutSessionUpdateRequest(items, buyer, fulfillmentAddress, fulfillmentOptionId);
+    }
+
+    public CheckoutSessionCompleteRequest readCompleteRequest(InputStream body) {
+        var root = readObject(body);
+        var buyer = readBuyerOrNull(root, "buyer");
+        var paymentData = mapPaymentData(JsonSupport.requireObject(root, "payment_data"));
+        return new CheckoutSessionCompleteRequest(buyer, paymentData);
+    }
+
+    public void writeCheckoutSession(OutputStream outputStream, CheckoutSession session) {
+        var builder = Json.createObjectBuilder();
+        builder.add("id", session.id().value());
+        if (session.buyer() != null) {
+            builder.add("buyer", writeBuyer(session.buyer()));
+        }
+        if (session.paymentProvider() != null) {
+            builder.add("payment_provider", writePaymentProvider(session.paymentProvider()));
+        }
+        builder.add("status", session.status().name().toLowerCase());
+        builder.add("currency", session.currency().value());
+        builder.add("line_items", writeLineItems(session.lineItems()));
+        if (session.fulfillmentAddress() != null) {
+            builder.add("fulfillment_address", AddressJson.write(session.fulfillmentAddress()));
+        }
+        builder.add("fulfillment_options", writeFulfillmentOptions(session.fulfillmentOptions()));
+        if (session.fulfillmentOptionId() != null) {
+            builder.add("fulfillment_option_id", session.fulfillmentOptionId().value());
+        }
+        builder.add("totals", writeTotals(session.totals()));
+        builder.add("messages", writeMessages(session.messages()));
+        builder.add("links", writeLinks(session.links()));
+        if (session.order() != null) {
+            builder.add("order", writeOrder(session.order()));
+        }
+        ErrorJson.writeObject(builder, outputStream);
+    }
+
+    public void writeError(OutputStream outputStream, ErrorResponse error) {
+        ErrorJson.write(outputStream, error);
     }
 }

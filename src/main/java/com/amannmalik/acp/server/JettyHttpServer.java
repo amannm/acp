@@ -5,15 +5,9 @@ import com.amannmalik.acp.api.delegatepayment.DelegatePaymentService;
 import com.amannmalik.acp.codec.CheckoutSessionJsonCodec;
 import com.amannmalik.acp.codec.DelegatePaymentJsonCodec;
 import com.amannmalik.acp.server.security.RequestAuthenticator;
-
 import org.eclipse.jetty.ee10.servlet.ServletContextHandler;
 import org.eclipse.jetty.ee10.servlet.ServletHolder;
-import org.eclipse.jetty.server.HttpConfiguration;
-import org.eclipse.jetty.server.HttpConnectionFactory;
-import org.eclipse.jetty.server.SecureRequestCustomizer;
-import org.eclipse.jetty.server.Server;
-import org.eclipse.jetty.server.ServerConnector;
-import org.eclipse.jetty.server.SslConnectionFactory;
+import org.eclipse.jetty.server.*;
 import org.eclipse.jetty.util.ssl.SslContextFactory;
 
 import java.util.Objects;

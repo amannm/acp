@@ -1,6 +1,7 @@
 package com.amannmalik.acp.server;
 
 import com.amannmalik.acp.util.Ensure;
+
 import java.nio.file.Path;
 import java.util.Arrays;
 
@@ -17,19 +18,19 @@ public record TlsConfiguration(Path keyStorePath, char[] keyStorePassword, char[
         }
     }
 
-    public String keyStorePasswordValue() {
-        return new String(keyStorePassword);
-    }
-
-    public String keyPasswordValue() {
-        return keyPassword == null ? null : new String(keyPassword);
-    }
-
     private static char[] copySecret(String field, char[] secret) {
         var value = Ensure.notNull(field, secret);
         if (value.length == 0) {
             throw new IllegalArgumentException(field + " MUST NOT be empty");
         }
         return Arrays.copyOf(value, value.length);
+    }
+
+    public String keyStorePasswordValue() {
+        return new String(keyStorePassword);
+    }
+
+    public String keyPasswordValue() {
+        return keyPassword == null ? null : new String(keyPassword);
     }
 }

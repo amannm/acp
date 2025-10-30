@@ -5,91 +5,86 @@ import com.amannmalik.acp.api.delegatepayment.InMemoryDelegatePaymentService;
 import com.amannmalik.acp.api.shared.CurrencyCode;
 import com.amannmalik.acp.server.JettyHttpServer;
 import com.amannmalik.acp.server.TlsConfiguration;
-import com.amannmalik.acp.server.security.ConfigurableRequestAuthenticator;
-import com.amannmalik.acp.server.security.RequestAuthenticator;
-import com.amannmalik.acp.server.security.SecurityConfiguration;
+import com.amannmalik.acp.server.security.*;
 import com.amannmalik.acp.server.webhook.HttpOrderWebhookPublisher;
 import com.amannmalik.acp.spi.webhook.OrderWebhookPublisher;
-
 import picocli.CommandLine;
 
-import java.time.Clock;
-import java.time.Duration;
 import java.net.URI;
 import java.net.http.HttpClient;
 import java.nio.file.Path;
-import java.util.Base64;
-import java.util.LinkedHashMap;
-import java.util.LinkedHashSet;
-import java.util.List;
-import java.util.Map;
-import java.util.Set;
+import java.time.Clock;
+import java.time.Duration;
+import java.util.*;
 import java.util.concurrent.Callable;
-import java.util.Arrays;
 
 @CommandLine.Command(name = "serve", description = "Start the Agentic Commerce Protocol reference server")
 public final class ServeCommand implements Callable<Integer> {
-    public ServeCommand() {}
-
     @CommandLine.Option(names = "--port", defaultValue = "8443", description = "HTTPS port to bind (default: ${DEFAULT-VALUE})")
     int httpsPort;
-
     @CommandLine.Option(names = "--http-port", defaultValue = "8080", description = "Plain HTTP port when --allow-insecure-http is set (default: ${DEFAULT-VALUE})")
     int httpPort;
-
     @CommandLine.Option(names = "--allow-insecure-http", defaultValue = "false", description = "Enable an additional plain HTTP listener (insecure; default: disabled)")
     boolean allowInsecureHttp;
-
     @CommandLine.Option(names = "--tls-keystore", description = "Path to TLS keystore (e.g., PKCS12)")
     Path tlsKeystore;
-
     @CommandLine.Option(names = "--tls-keystore-password", description = "Password for TLS keystore")
     String tlsKeystorePassword;
-
     @CommandLine.Option(names = "--tls-key-password", description = "Password for private key (defaults to keystore password)")
     String tlsKeyPassword;
-
     @CommandLine.Option(names = "--tls-keystore-type", defaultValue = "PKCS12", description = "Keystore type (default: ${DEFAULT-VALUE})")
     String tlsKeystoreType;
-
     @CommandLine.Option(
             names = "--price",
             split = ",",
             description = "Static price override(s) in the form item_id=amount_minor_units")
     List<String> priceOverrides;
-
     @CommandLine.Option(
             names = "--auth-token",
             required = true,
             description = "Allowed bearer token(s). Repeat to configure multiple tokens.")
     List<String> authTokens;
-
     @CommandLine.Option(
             names = "--signature-key",
             description = "Signature key mapping keyId=base64urlSecret. Repeat per key.")
     List<String> signatureKeys;
-
     @CommandLine.Option(
             names = "--max-timestamp-skew",
             defaultValue = "PT5M",
             description = "Maximum allowed request timestamp skew (ISO-8601). Default: ${DEFAULT-VALUE}")
     Duration maxTimestampSkew;
-
     @CommandLine.Option(
             names = "--webhook-endpoint",
             description = "Order webhook endpoint URL (enables webhook publishing when provided)")
     String webhookEndpoint;
-
     @CommandLine.Option(
             names = "--webhook-signature-key",
             description = "Base64url secret used to sign webhook payloads")
     String webhookSignatureKey;
-
     @CommandLine.Option(
             names = "--webhook-signature-header",
             defaultValue = "Merchant-Signature",
             description = "Header name used for webhook signatures (default: ${DEFAULT-VALUE})")
     String webhookSignatureHeader;
+
+    public ServeCommand() {
+    }
+
+    private static byte[] decodeSecret(String encoded) {
+        try {
+            return Base64.getUrlDecoder().decode(encoded);
+        } catch (IllegalArgumentException e) {
+            throw new IllegalArgumentException("Signature key MUST be base64url encoded", e);
+        }
+    }
+
+    private static URI parseUri(String value) {
+        try {
+            return URI.create(value);
+        } catch (IllegalArgumentException e) {
+            throw new IllegalArgumentException("Invalid webhook endpoint URI: " + value, e);
+        }
+    }
 
     @Override
     public Integer call() throws Exception {
@@ -201,14 +196,6 @@ public final class ServeCommand implements Callable<Integer> {
         return Map.copyOf(map);
     }
 
-    private static byte[] decodeSecret(String encoded) {
-        try {
-            return Base64.getUrlDecoder().decode(encoded);
-        } catch (IllegalArgumentException e) {
-            throw new IllegalArgumentException("Signature key MUST be base64url encoded", e);
-        }
-    }
-
     private OrderWebhookPublisher webhookPublisher() {
         if (webhookEndpoint == null && webhookSignatureKey == null) {
             return OrderWebhookPublisher.NOOP;
@@ -221,13 +208,5 @@ public final class ServeCommand implements Callable<Integer> {
         var secret = decodeSecret(webhookSignatureKey);
         var client = HttpClient.newHttpClient();
         return new HttpOrderWebhookPublisher(client, endpointUri, webhookSignatureHeader, secret, Clock.systemUTC());
-    }
-
-    private static URI parseUri(String value) {
-        try {
-            return URI.create(value);
-        } catch (IllegalArgumentException e) {
-            throw new IllegalArgumentException("Invalid webhook endpoint URI: " + value, e);
-        }
     }
 }

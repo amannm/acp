@@ -1,20 +1,15 @@
 package com.amannmalik.acp.server.security;
 
 import com.amannmalik.acp.util.Ensure;
+
 import java.time.Duration;
-import java.util.LinkedHashMap;
-import java.util.Map;
-import java.util.Set;
+import java.util.*;
 
 public record SecurityConfiguration(Set<String> bearerTokens, Map<String, byte[]> hmacSecrets, Duration maxTimestampSkew) {
     public SecurityConfiguration {
         bearerTokens = normalizeTokens(bearerTokens);
         hmacSecrets = normalizeSecrets(hmacSecrets);
         maxTimestampSkew = normalizeSkew(maxTimestampSkew);
-    }
-
-    public boolean signatureRequired() {
-        return !hmacSecrets.isEmpty();
     }
 
     private static Set<String> normalizeTokens(Set<String> tokens) {
@@ -53,5 +48,9 @@ public record SecurityConfiguration(Set<String> bearerTokens, Map<String, byte[]
             throw new IllegalArgumentException("security.max_timestamp_skew MUST be > PT0S");
         }
         return skew;
+    }
+
+    public boolean signatureRequired() {
+        return !hmacSecrets.isEmpty();
     }
 }

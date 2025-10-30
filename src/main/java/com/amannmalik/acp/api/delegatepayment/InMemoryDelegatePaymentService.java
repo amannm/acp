@@ -4,10 +4,7 @@ import com.amannmalik.acp.api.delegatepayment.model.DelegatePaymentRequest;
 import com.amannmalik.acp.api.delegatepayment.model.DelegatePaymentResponse;
 
 import java.time.Clock;
-import java.util.LinkedHashMap;
-import java.util.Map;
-import java.util.Objects;
-import java.util.UUID;
+import java.util.*;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ConcurrentMap;
 
@@ -21,6 +18,20 @@ public final class InMemoryDelegatePaymentService implements DelegatePaymentServ
 
     public InMemoryDelegatePaymentService(Clock clock) {
         this.clock = Objects.requireNonNullElse(clock, Clock.systemUTC());
+    }
+
+    private static Map<String, String> responseMetadata(DelegatePaymentRequest request, String idempotencyKey) {
+        var map = new LinkedHashMap<>(request.metadata());
+        map.putIfAbsent("merchant_id", request.allowance().merchantId());
+        if (idempotencyKey != null && !idempotencyKey.isBlank()) {
+            map.put("idempotency_key", idempotencyKey);
+        }
+        return Map.copyOf(map);
+    }
+
+    private static String nextTokenId() {
+        var uuid = UUID.randomUUID().toString().replace("-", "");
+        return "vt_%s".formatted(uuid.substring(0, 16));
     }
 
     @Override
@@ -61,19 +72,6 @@ public final class InMemoryDelegatePaymentService implements DelegatePaymentServ
                 metadata);
     }
 
-    private static Map<String, String> responseMetadata(DelegatePaymentRequest request, String idempotencyKey) {
-        var map = new LinkedHashMap<>(request.metadata());
-        map.putIfAbsent("merchant_id", request.allowance().merchantId());
-        if (idempotencyKey != null && !idempotencyKey.isBlank()) {
-            map.put("idempotency_key", idempotencyKey);
-        }
-        return Map.copyOf(map);
+    private record StoredRecord(DelegatePaymentRequest request, DelegatePaymentResponse response) {
     }
-
-    private static String nextTokenId() {
-        var uuid = UUID.randomUUID().toString().replace("-", "");
-        return "vt_%s".formatted(uuid.substring(0, 16));
-    }
-
-    private record StoredRecord(DelegatePaymentRequest request, DelegatePaymentResponse response) {}
 }

@@ -1,19 +1,13 @@
 package com.amannmalik.acp.server;
 
-import com.amannmalik.acp.api.delegatepayment.DelegatePaymentConflictException;
-import com.amannmalik.acp.api.delegatepayment.DelegatePaymentIdempotencyConflictException;
-import com.amannmalik.acp.api.delegatepayment.DelegatePaymentService;
-import com.amannmalik.acp.api.delegatepayment.DelegatePaymentValidationException;
+import com.amannmalik.acp.api.delegatepayment.*;
 import com.amannmalik.acp.api.shared.ApiVersion;
 import com.amannmalik.acp.api.shared.ErrorResponse;
 import com.amannmalik.acp.codec.DelegatePaymentJsonCodec;
 import com.amannmalik.acp.codec.JsonDecodingException;
 import com.amannmalik.acp.server.security.RequestAuthenticator;
-
 import jakarta.servlet.ServletException;
-import jakarta.servlet.http.HttpServlet;
-import jakarta.servlet.http.HttpServletRequest;
-import jakarta.servlet.http.HttpServletResponse;
+import jakarta.servlet.http.*;
 
 import java.io.IOException;
 import java.util.Locale;
@@ -30,6 +24,30 @@ public final class DelegatePaymentServlet extends HttpServlet {
         this.service = service;
         this.codec = codec;
         this.authenticator = authenticator;
+    }
+
+    private static String normalizeHeader(String value) {
+        if (value == null || value.isBlank()) {
+            return null;
+        }
+        return value;
+    }
+
+    private static byte[] readBody(HttpServletRequest request) throws IOException {
+        try (var inputStream = request.getInputStream()) {
+            return inputStream.readAllBytes();
+        }
+    }
+
+    private static void propagateCorrelationHeaders(HttpServletRequest req, HttpServletResponse resp) {
+        var requestId = req.getHeader("Request-Id");
+        if (requestId != null && !requestId.isBlank()) {
+            resp.setHeader("Request-Id", requestId);
+        }
+        var idempotencyKey = req.getHeader("Idempotency-Key");
+        if (idempotencyKey != null && !idempotencyKey.isBlank()) {
+            resp.setHeader("Idempotency-Key", idempotencyKey);
+        }
     }
 
     @Override
@@ -84,13 +102,6 @@ public final class DelegatePaymentServlet extends HttpServlet {
                     "unsupported_media_type",
                     "Content-Type MUST be application/json");
         }
-    }
-
-    private static String normalizeHeader(String value) {
-        if (value == null || value.isBlank()) {
-            return null;
-        }
-        return value;
     }
 
     private void handleWithErrors(HttpServletRequest req, HttpServletResponse resp, IOExceptionRunnable action)
@@ -162,23 +173,6 @@ public final class DelegatePaymentServlet extends HttpServlet {
         propagateCorrelationHeaders(req, resp);
         resp.setContentType(APPLICATION_JSON);
         codec.writeError(resp.getOutputStream(), new ErrorResponse(type, code, message, param));
-    }
-
-    private static byte[] readBody(HttpServletRequest request) throws IOException {
-        try (var inputStream = request.getInputStream()) {
-            return inputStream.readAllBytes();
-        }
-    }
-
-    private static void propagateCorrelationHeaders(HttpServletRequest req, HttpServletResponse resp) {
-        var requestId = req.getHeader("Request-Id");
-        if (requestId != null && !requestId.isBlank()) {
-            resp.setHeader("Request-Id", requestId);
-        }
-        var idempotencyKey = req.getHeader("Idempotency-Key");
-        if (idempotencyKey != null && !idempotencyKey.isBlank()) {
-            resp.setHeader("Idempotency-Key", idempotencyKey);
-        }
     }
 
     @FunctionalInterface

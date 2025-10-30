@@ -2,6 +2,7 @@ package com.amannmalik.acp.api.checkout.model;
 
 import com.amannmalik.acp.api.shared.CurrencyCode;
 import com.amannmalik.acp.util.Ensure;
+
 import java.util.List;
 
 public record CheckoutSession(

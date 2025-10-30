@@ -1,15 +1,11 @@
 package com.amannmalik.acp.codec;
 
 import com.amannmalik.acp.api.shared.MinorUnitAmount;
-
-import jakarta.json.JsonArray;
-import jakarta.json.JsonNumber;
-import jakarta.json.JsonObject;
-import jakarta.json.JsonString;
-import jakarta.json.JsonValue;
+import jakarta.json.*;
 
 final class JsonSupport {
-    private JsonSupport() {}
+    private JsonSupport() {
+    }
 
     static JsonObject requireObject(JsonObject parent, String key) {
         if (!parent.containsKey(key) || parent.isNull(key)) {

@@ -8,7 +8,8 @@ import java.util.Objects;
  * still making violations fail-fast and obvious.
  */
 public final class Ensure {
-    private Ensure() {}
+    private Ensure() {
+    }
 
     public static String nonBlank(String field, String value) {
         if (value == null || value.isBlank()) {

@@ -1,18 +1,17 @@
 package com.amannmalik.acp.server.security;
 
-import com.amannmalik.acp.server.HttpProblem;
 import com.amannmalik.acp.api.shared.ErrorResponse;
+import com.amannmalik.acp.server.HttpProblem;
 import jakarta.servlet.http.HttpServletRequest;
+
+import javax.crypto.Mac;
+import javax.crypto.spec.SecretKeySpec;
 import java.nio.charset.StandardCharsets;
 import java.security.GeneralSecurityException;
 import java.security.MessageDigest;
-import java.time.Clock;
-import java.time.Duration;
-import java.time.Instant;
+import java.time.*;
 import java.util.Base64;
 import java.util.Locale;
-import javax.crypto.Mac;
-import javax.crypto.spec.SecretKeySpec;
 
 public final class ConfigurableRequestAuthenticator implements RequestAuthenticator {
     private static final Base64.Decoder SIGNATURE_DECODER = Base64.getUrlDecoder();
@@ -23,6 +22,37 @@ public final class ConfigurableRequestAuthenticator implements RequestAuthentica
     public ConfigurableRequestAuthenticator(SecurityConfiguration configuration, Clock clock) {
         this.configuration = configuration;
         this.clock = clock == null ? Clock.systemUTC() : clock;
+    }
+
+    private static String headerValue(HttpServletRequest request, String header) {
+        var value = request.getHeader(header);
+        if (value == null) {
+            return null;
+        }
+        var trimmed = value.trim();
+        return trimmed.isEmpty() ? null : trimmed;
+    }
+
+    private static byte[] decodeSignature(String encoded) {
+        try {
+            return SIGNATURE_DECODER.decode(encoded);
+        } catch (IllegalArgumentException e) {
+            throw new HttpProblem(
+                    400,
+                    ErrorResponse.ErrorType.INVALID_REQUEST,
+                    "invalid_signature",
+                    "Signature MUST be base64url encoded");
+        }
+    }
+
+    private static byte[] hmacSha256(byte[] secret, byte[] payload) {
+        try {
+            var mac = Mac.getInstance("HmacSHA256");
+            mac.init(new SecretKeySpec(secret, "HmacSHA256"));
+            return mac.doFinal(payload);
+        } catch (GeneralSecurityException e) {
+            throw new IllegalStateException("Failed to verify signature", e);
+        }
     }
 
     @Override
@@ -114,15 +144,6 @@ public final class ConfigurableRequestAuthenticator implements RequestAuthentica
         return token;
     }
 
-    private static String headerValue(HttpServletRequest request, String header) {
-        var value = request.getHeader(header);
-        if (value == null) {
-            return null;
-        }
-        var trimmed = value.trim();
-        return trimmed.isEmpty() ? null : trimmed;
-    }
-
     private Instant parseTimestamp(String timestamp) {
         try {
             return Instant.parse(timestamp);
@@ -144,28 +165,6 @@ public final class ConfigurableRequestAuthenticator implements RequestAuthentica
                     ErrorResponse.ErrorType.INVALID_REQUEST,
                     "timestamp_out_of_window",
                     "Timestamp outside allowed skew window");
-        }
-    }
-
-    private static byte[] decodeSignature(String encoded) {
-        try {
-            return SIGNATURE_DECODER.decode(encoded);
-        } catch (IllegalArgumentException e) {
-            throw new HttpProblem(
-                    400,
-                    ErrorResponse.ErrorType.INVALID_REQUEST,
-                    "invalid_signature",
-                    "Signature MUST be base64url encoded");
-        }
-    }
-
-    private static byte[] hmacSha256(byte[] secret, byte[] payload) {
-        try {
-            var mac = Mac.getInstance("HmacSHA256");
-            mac.init(new SecretKeySpec(secret, "HmacSHA256"));
-            return mac.doFinal(payload);
-        } catch (GeneralSecurityException e) {
-            throw new IllegalStateException("Failed to verify signature", e);
         }
     }
 }

@@ -1,28 +1,17 @@
 package com.amannmalik.acp.server;
 
-import com.amannmalik.acp.api.checkout.CheckoutSessionConflictException;
-import com.amannmalik.acp.api.checkout.CheckoutSessionIdempotencyConflictException;
-import com.amannmalik.acp.api.checkout.CheckoutSessionMethodNotAllowedException;
-import com.amannmalik.acp.api.checkout.CheckoutSessionNotFoundException;
-import com.amannmalik.acp.api.checkout.CheckoutSessionService;
-import com.amannmalik.acp.api.checkout.model.CheckoutSessionCompleteRequest;
+import com.amannmalik.acp.api.checkout.*;
 import com.amannmalik.acp.api.checkout.model.CheckoutSessionId;
-import com.amannmalik.acp.api.checkout.model.CheckoutSessionUpdateRequest;
 import com.amannmalik.acp.api.shared.ApiVersion;
 import com.amannmalik.acp.api.shared.ErrorResponse;
 import com.amannmalik.acp.codec.CheckoutSessionJsonCodec;
 import com.amannmalik.acp.codec.JsonDecodingException;
 import com.amannmalik.acp.server.security.RequestAuthenticator;
-
 import jakarta.servlet.ServletException;
-import jakarta.servlet.http.HttpServlet;
-import jakarta.servlet.http.HttpServletRequest;
-import jakarta.servlet.http.HttpServletResponse;
+import jakarta.servlet.http.*;
 
 import java.io.IOException;
-import java.util.Arrays;
-import java.util.List;
-import java.util.Locale;
+import java.util.*;
 
 public final class CheckoutSessionServlet extends HttpServlet {
     private static final String APPLICATION_JSON = "application/json";
@@ -36,6 +25,41 @@ public final class CheckoutSessionServlet extends HttpServlet {
         this.service = service;
         this.codec = codec;
         this.authenticator = authenticator;
+    }
+
+    private static byte[] readBody(HttpServletRequest request) throws IOException {
+        try (var inputStream = request.getInputStream()) {
+            return inputStream.readAllBytes();
+        }
+    }
+
+    private static List<String> pathSegments(HttpServletRequest req) {
+        var pathInfo = req.getPathInfo();
+        if (pathInfo == null || pathInfo.isBlank() || pathInfo.equals("/")) {
+            return List.of();
+        }
+        return Arrays.stream(pathInfo.split("/"))
+                .filter(segment -> !segment.isBlank())
+                .toList();
+    }
+
+    private static void propagateCorrelationHeaders(HttpServletRequest req, HttpServletResponse resp) {
+        var requestId = req.getHeader("Request-Id");
+        if (requestId != null && !requestId.isBlank()) {
+            resp.setHeader("Request-Id", requestId);
+        }
+        var idempotencyKey = req.getHeader("Idempotency-Key");
+        if (idempotencyKey != null && !idempotencyKey.isBlank()) {
+            resp.setHeader("Idempotency-Key", idempotencyKey);
+        }
+    }
+
+    private static String normalizeHeader(String value) {
+        if (value == null) {
+            return null;
+        }
+        var trimmed = value.trim();
+        return trimmed.isEmpty() ? null : trimmed;
     }
 
     @Override
@@ -243,41 +267,6 @@ public final class CheckoutSessionServlet extends HttpServlet {
         propagateCorrelationHeaders(req, resp);
         resp.setContentType(APPLICATION_JSON);
         codec.writeError(resp.getOutputStream(), new ErrorResponse(type, code, message, param));
-    }
-
-    private static byte[] readBody(HttpServletRequest request) throws IOException {
-        try (var inputStream = request.getInputStream()) {
-            return inputStream.readAllBytes();
-        }
-    }
-
-    private static List<String> pathSegments(HttpServletRequest req) {
-        var pathInfo = req.getPathInfo();
-        if (pathInfo == null || pathInfo.isBlank() || pathInfo.equals("/")) {
-            return List.of();
-        }
-        return Arrays.stream(pathInfo.split("/"))
-                .filter(segment -> !segment.isBlank())
-                .toList();
-    }
-
-    private static void propagateCorrelationHeaders(HttpServletRequest req, HttpServletResponse resp) {
-        var requestId = req.getHeader("Request-Id");
-        if (requestId != null && !requestId.isBlank()) {
-            resp.setHeader("Request-Id", requestId);
-        }
-        var idempotencyKey = req.getHeader("Idempotency-Key");
-        if (idempotencyKey != null && !idempotencyKey.isBlank()) {
-            resp.setHeader("Idempotency-Key", idempotencyKey);
-        }
-    }
-
-    private static String normalizeHeader(String value) {
-        if (value == null) {
-            return null;
-        }
-        var trimmed = value.trim();
-        return trimmed.isEmpty() ? null : trimmed;
     }
 
     @FunctionalInterface

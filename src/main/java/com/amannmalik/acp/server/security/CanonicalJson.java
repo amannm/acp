@@ -1,16 +1,13 @@
 package com.amannmalik.acp.server.security;
 
-import jakarta.json.Json;
-import jakarta.json.JsonNumber;
-import jakarta.json.JsonString;
-import jakarta.json.JsonValue;
+import jakarta.json.*;
+
 import java.io.ByteArrayInputStream;
-import java.util.ArrayList;
-import java.util.Collections;
-import java.util.List;
+import java.util.*;
 
 final class CanonicalJson {
-    private CanonicalJson() {}
+    private CanonicalJson() {
+    }
 
     static String canonicalize(byte[] body) {
         if (body == null || body.length == 0) {
@@ -32,8 +29,8 @@ final class CanonicalJson {
             case OBJECT -> writeObject(value.asJsonObject(), builder);
             case ARRAY -> writeArray(value.asJsonArray(), builder);
             case STRING -> builder.append(quote(((JsonString) value).getString()));
-            case NUMBER -> builder.append(((JsonNumber) value).toString());
-            case TRUE, FALSE, NULL -> builder.append(value.toString());
+            case NUMBER -> builder.append(value);
+            case TRUE, FALSE, NULL -> builder.append(value);
             default -> throw new IllegalStateException("Unhandled JSON value type: " + type);
         }
     }

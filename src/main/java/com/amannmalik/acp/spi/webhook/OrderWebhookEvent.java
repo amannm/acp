@@ -1,6 +1,7 @@
 package com.amannmalik.acp.spi.webhook;
 
 import com.amannmalik.acp.util.Ensure;
+
 import java.net.URI;
 
 public record OrderWebhookEvent(Type type, String checkoutSessionId, OrderStatus status, URI permalinkUrl) {

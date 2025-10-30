@@ -1,54 +1,16 @@
 package com.amannmalik.acp.codec;
 
-import com.amannmalik.acp.api.checkout.model.Address;
-import com.amannmalik.acp.api.delegatepayment.model.Allowance;
-import com.amannmalik.acp.api.delegatepayment.model.DelegatePaymentRequest;
-import com.amannmalik.acp.api.delegatepayment.model.DelegatePaymentResponse;
-import com.amannmalik.acp.api.delegatepayment.model.PaymentMethodCard;
-import com.amannmalik.acp.api.delegatepayment.model.RiskSignal;
-import com.amannmalik.acp.api.shared.CurrencyCode;
-import com.amannmalik.acp.api.shared.ErrorResponse;
-import com.amannmalik.acp.api.shared.MinorUnitAmount;
-
-import jakarta.json.Json;
-import jakarta.json.JsonArray;
-import jakarta.json.JsonObject;
-import jakarta.json.JsonObjectBuilder;
-import jakarta.json.JsonReader;
-import jakarta.json.JsonString;
-import jakarta.json.JsonValue;
+import com.amannmalik.acp.api.delegatepayment.model.*;
+import com.amannmalik.acp.api.shared.*;
+import jakarta.json.*;
 
 import java.io.InputStream;
 import java.io.OutputStream;
 import java.time.Instant;
-import java.util.LinkedHashMap;
-import java.util.List;
-import java.util.Map;
+import java.util.*;
 
 /// See specification/2025-09-29/spec/openapi/openapi.delegate_payment.yaml
 public final class DelegatePaymentJsonCodec {
-    public DelegatePaymentRequest readRequest(InputStream body) {
-        var root = readObject(body);
-        var paymentMethod = mapPaymentMethod(JsonSupport.requireObject(root, "payment_method"));
-        var allowance = mapAllowance(JsonSupport.requireObject(root, "allowance"));
-        var billingAddress = AddressJson.readOptional(root, "billing_address");
-        var riskSignals = mapRiskSignals(JsonSupport.requireArray(root, "risk_signals"));
-        var metadata = mapMetadata(JsonSupport.requireObject(root, "metadata"));
-        return new DelegatePaymentRequest(paymentMethod, allowance, billingAddress, riskSignals, metadata);
-    }
-
-    public void writeResponse(OutputStream outputStream, DelegatePaymentResponse response) {
-        var builder = Json.createObjectBuilder()
-                .add("id", response.id())
-                .add("created", response.created().toString())
-                .add("metadata", buildMetadata(response.metadata()));
-        ErrorJson.writeObject(builder, outputStream);
-    }
-
-    public void writeError(OutputStream stream, ErrorResponse error) {
-        ErrorJson.write(stream, error);
-    }
-
     private static JsonObject readObject(InputStream body) {
         try (JsonReader reader = Json.createReader(body)) {
             return reader.readObject();
@@ -129,5 +91,27 @@ public final class DelegatePaymentJsonCodec {
         var builder = Json.createObjectBuilder();
         metadata.forEach(builder::add);
         return builder.build();
+    }
+
+    public DelegatePaymentRequest readRequest(InputStream body) {
+        var root = readObject(body);
+        var paymentMethod = mapPaymentMethod(JsonSupport.requireObject(root, "payment_method"));
+        var allowance = mapAllowance(JsonSupport.requireObject(root, "allowance"));
+        var billingAddress = AddressJson.readOptional(root, "billing_address");
+        var riskSignals = mapRiskSignals(JsonSupport.requireArray(root, "risk_signals"));
+        var metadata = mapMetadata(JsonSupport.requireObject(root, "metadata"));
+        return new DelegatePaymentRequest(paymentMethod, allowance, billingAddress, riskSignals, metadata);
+    }
+
+    public void writeResponse(OutputStream outputStream, DelegatePaymentResponse response) {
+        var builder = Json.createObjectBuilder()
+                .add("id", response.id())
+                .add("created", response.created().toString())
+                .add("metadata", buildMetadata(response.metadata()));
+        ErrorJson.writeObject(builder, outputStream);
+    }
+
+    public void writeError(OutputStream stream, ErrorResponse error) {
+        ErrorJson.write(stream, error);
     }
 }

@@ -13,10 +13,6 @@ public record Allowance(
         String checkoutSessionId,
         String merchantId,
         Instant expiresAt) {
-    public enum Reason {
-        ONE_TIME
-    }
-
     public Allowance {
         reason = Ensure.notNull("allowance.reason", reason);
         maxAmount = Ensure.notNull("allowance.max_amount", maxAmount);
@@ -24,5 +20,9 @@ public record Allowance(
         checkoutSessionId = Ensure.nonBlank("allowance.checkout_session_id", checkoutSessionId);
         merchantId = Ensure.nonBlank("allowance.merchant_id", merchantId);
         expiresAt = Ensure.notNull("allowance.expires_at", expiresAt);
+    }
+
+    public enum Reason {
+        ONE_TIME
     }
 }

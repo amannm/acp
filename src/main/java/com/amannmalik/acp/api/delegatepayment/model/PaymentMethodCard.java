@@ -22,24 +22,6 @@ public record PaymentMethodCard(
         String displayBrand,
         String displayLast4,
         Map<String, String> metadata) {
-    public enum CardNumberType {
-        FPAN,
-        NETWORK_TOKEN
-    }
-
-    public enum Check {
-        AVS,
-        CVV,
-        ANI,
-        AUTH0
-    }
-
-    public enum DisplayCardFundingType {
-        CREDIT,
-        DEBIT,
-        PREPAID
-    }
-
     public PaymentMethodCard {
         cardNumberType = Ensure.notNull("payment_method.card_number_type", cardNumberType);
         number = Ensure.nonBlank("payment_method.number", number);
@@ -78,5 +60,23 @@ public record PaymentMethodCard(
             throw new IllegalArgumentException("Optional fields MUST be non-blank when provided");
         }
         return text;
+    }
+
+    public enum CardNumberType {
+        FPAN,
+        NETWORK_TOKEN
+    }
+
+    public enum Check {
+        AVS,
+        CVV,
+        ANI,
+        AUTH0
+    }
+
+    public enum DisplayCardFundingType {
+        CREDIT,
+        DEBIT,
+        PREPAID
     }
 }

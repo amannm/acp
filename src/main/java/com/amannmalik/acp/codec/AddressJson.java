@@ -1,12 +1,11 @@
 package com.amannmalik.acp.codec;
 
 import com.amannmalik.acp.api.checkout.model.Address;
-import jakarta.json.Json;
-import jakarta.json.JsonObject;
-import jakarta.json.JsonObjectBuilder;
+import jakarta.json.*;
 
 final class AddressJson {
-    private AddressJson() {}
+    private AddressJson() {
+    }
 
     static Address read(JsonObject object) {
         return new Address(
