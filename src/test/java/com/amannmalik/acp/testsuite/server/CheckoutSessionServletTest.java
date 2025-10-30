@@ -4,6 +4,8 @@ import com.amannmalik.acp.api.checkout.InMemoryCheckoutSessionService;
 import com.amannmalik.acp.api.delegatepayment.InMemoryDelegatePaymentService;
 import com.amannmalik.acp.api.shared.ApiVersion;
 import com.amannmalik.acp.server.JettyHttpServer;
+import com.amannmalik.acp.server.security.ConfigurableRequestAuthenticator;
+import com.amannmalik.acp.server.security.SecurityConfiguration;
 
 import jakarta.json.Json;
 
@@ -14,6 +16,9 @@ import java.net.URI;
 import java.net.http.HttpClient;
 import java.net.http.HttpRequest;
 import java.net.http.HttpResponse;
+import java.time.Clock;
+import java.util.Map;
+import java.util.Set;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertTrue;
@@ -21,7 +26,7 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 final class CheckoutSessionServletTest {
     @Test
     void createAndRetrieveSession() throws Exception {
-        try (var server = new JettyHttpServer(0, new InMemoryCheckoutSessionService(), new InMemoryDelegatePaymentService())) {
+        try (var server = newServer()) {
             server.start();
             var client = HttpClient.newHttpClient();
             var baseUri = URI.create("http://localhost:" + server.port());
@@ -53,7 +58,7 @@ final class CheckoutSessionServletTest {
 
     @Test
     void createIdempotencyReturnsExistingSessionState() throws Exception {
-        try (var server = new JettyHttpServer(0, new InMemoryCheckoutSessionService(), new InMemoryDelegatePaymentService())) {
+        try (var server = newServer()) {
             server.start();
             var client = HttpClient.newHttpClient();
             var baseUri = URI.create("http://localhost:" + server.port());
@@ -75,7 +80,7 @@ final class CheckoutSessionServletTest {
 
     @Test
     void createIdempotencyConflictReturns409() throws Exception {
-        try (var server = new JettyHttpServer(0, new InMemoryCheckoutSessionService(), new InMemoryDelegatePaymentService())) {
+        try (var server = newServer()) {
             server.start();
             var client = HttpClient.newHttpClient();
             var baseUri = URI.create("http://localhost:" + server.port());
@@ -92,13 +97,13 @@ final class CheckoutSessionServletTest {
             var second = sendCreateRequest(client, baseUri, mutated, key, "req-create-4");
 
             assertEquals(409, second.statusCode());
-            assertTrue(second.body().contains("state_conflict"));
+            assertTrue(second.body().contains("idempotency_conflict"));
         }
     }
 
     @Test
     void completeIdempotencyReturnsSameOrder() throws Exception {
-        try (var server = new JettyHttpServer(0, new InMemoryCheckoutSessionService(), new InMemoryDelegatePaymentService())) {
+        try (var server = newServer()) {
             server.start();
             var client = HttpClient.newHttpClient();
             var baseUri = URI.create("http://localhost:" + server.port());
@@ -136,7 +141,7 @@ final class CheckoutSessionServletTest {
 
     @Test
     void completeIdempotencyConflictReturns409() throws Exception {
-        try (var server = new JettyHttpServer(0, new InMemoryCheckoutSessionService(), new InMemoryDelegatePaymentService())) {
+        try (var server = newServer()) {
             server.start();
             var client = HttpClient.newHttpClient();
             var baseUri = URI.create("http://localhost:" + server.port());
@@ -172,8 +177,17 @@ final class CheckoutSessionServletTest {
             var second = sendCompleteRequest(client, baseUri, sessionId, mutatedBody, "idem-conflict", "req-complete-6");
 
             assertEquals(409, second.statusCode());
-            assertTrue(second.body().contains("state_conflict"));
+            assertTrue(second.body().contains("idempotency_conflict"));
         }
+    }
+
+    private static JettyHttpServer newServer() {
+        var checkout = new InMemoryCheckoutSessionService();
+        var delegate = new InMemoryDelegatePaymentService();
+        var authenticator = new ConfigurableRequestAuthenticator(
+                new SecurityConfiguration(Set.of("test"), Map.of(), java.time.Duration.ofMinutes(5)),
+                Clock.systemUTC());
+        return new JettyHttpServer(0, checkout, delegate, authenticator);
     }
 
     private static HttpResponse<String> sendCreateRequest(

@@ -20,19 +20,19 @@ public final class HttpProblem extends RuntimeException {
         this.param = param;
     }
 
-    int status() {
+    public int status() {
         return status;
     }
 
-    ErrorResponse.ErrorType errorType() {
+    public ErrorResponse.ErrorType errorType() {
         return errorType;
     }
 
-    String code() {
+    public String code() {
         return code;
     }
 
-    String param() {
+    public String param() {
         return param;
     }
 }

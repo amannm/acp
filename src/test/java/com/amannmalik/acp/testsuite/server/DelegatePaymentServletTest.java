@@ -4,6 +4,8 @@ import com.amannmalik.acp.api.checkout.InMemoryCheckoutSessionService;
 import com.amannmalik.acp.api.delegatepayment.InMemoryDelegatePaymentService;
 import com.amannmalik.acp.api.shared.ApiVersion;
 import com.amannmalik.acp.server.JettyHttpServer;
+import com.amannmalik.acp.server.security.ConfigurableRequestAuthenticator;
+import com.amannmalik.acp.server.security.SecurityConfiguration;
 
 import jakarta.json.Json;
 
@@ -14,6 +16,9 @@ import java.net.URI;
 import java.net.http.HttpClient;
 import java.net.http.HttpRequest;
 import java.net.http.HttpResponse;
+import java.time.Clock;
+import java.util.Map;
+import java.util.Set;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertTrue;
@@ -56,10 +61,7 @@ final class DelegatePaymentServletTest {
 
     @Test
     void createDelegatePaymentToken() throws Exception {
-        try (var server = new JettyHttpServer(
-                0,
-                new InMemoryCheckoutSessionService(),
-                new InMemoryDelegatePaymentService())) {
+        try (var server = newServer()) {
             server.start();
             var client = HttpClient.newHttpClient();
             var response = sendDelegatePaymentRequest(client, serverBaseUri(server), "idem_create", VALID_REQUEST_BODY);
@@ -75,10 +77,7 @@ final class DelegatePaymentServletTest {
 
     @Test
     void idempotencyConflictReturns409() throws Exception {
-        try (var server = new JettyHttpServer(
-                0,
-                new InMemoryCheckoutSessionService(),
-                new InMemoryDelegatePaymentService())) {
+        try (var server = newServer()) {
             server.start();
             var client = HttpClient.newHttpClient();
             var baseBody = VALID_REQUEST_BODY;
@@ -96,10 +95,7 @@ final class DelegatePaymentServletTest {
 
     @Test
     void expiredAllowanceReturns422() throws Exception {
-        try (var server = new JettyHttpServer(
-                0,
-                new InMemoryCheckoutSessionService(),
-                new InMemoryDelegatePaymentService())) {
+        try (var server = newServer()) {
             server.start();
             var client = HttpClient.newHttpClient();
             var expiredBody = VALID_REQUEST_BODY.replace("2030-01-01T00:00:00Z", "2020-01-01T00:00:00Z");
@@ -125,5 +121,14 @@ final class DelegatePaymentServletTest {
                 .POST(HttpRequest.BodyPublishers.ofString(body))
                 .build();
         return client.send(request, HttpResponse.BodyHandlers.ofString());
+    }
+
+    private static JettyHttpServer newServer() {
+        var checkout = new InMemoryCheckoutSessionService();
+        var delegate = new InMemoryDelegatePaymentService();
+        var authenticator = new ConfigurableRequestAuthenticator(
+                new SecurityConfiguration(Set.of("test"), Map.of(), java.time.Duration.ofMinutes(5)),
+                Clock.systemUTC());
+        return new JettyHttpServer(0, checkout, delegate, authenticator);
     }
 }
