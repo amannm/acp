@@ -95,7 +95,9 @@ final class DelegatePaymentServletTest {
             var second = sendDelegatePaymentRequest(client, serverBaseUri(server), idemKey, mutatedBody);
 
             assertEquals(409, second.statusCode());
-            assertTrue(second.body().contains("idempotency_conflict"));
+            var errorJson = Json.createReader(new StringReader(second.body())).readObject();
+            assertEquals("request_not_idempotent", errorJson.getString("type"));
+            assertEquals("idempotency_conflict", errorJson.getString("code"));
         }
     }
 
