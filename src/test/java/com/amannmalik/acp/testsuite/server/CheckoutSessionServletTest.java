@@ -10,6 +10,7 @@ import com.amannmalik.acp.server.security.SecurityConfiguration;
 import com.amannmalik.acp.testutil.TlsTestSupport;
 
 import jakarta.json.Json;
+import jakarta.json.JsonObject;
 
 import org.junit.jupiter.api.Test;
 
@@ -44,7 +45,7 @@ final class CheckoutSessionServletTest {
 
             assertEquals(201, createResponse.statusCode());
             assertEquals("req-create-1", createResponse.headers().firstValue("Request-Id").orElseThrow());
-            var sessionId = Json.createReader(new StringReader(createResponse.body())).readObject().getString("id");
+            var sessionId = json(createResponse.body()).getString("id");
 
             var getResponse = client.send(
                     HttpRequest.newBuilder(baseUri.resolve("/checkout_sessions/" + sessionId))
@@ -70,10 +71,10 @@ final class CheckoutSessionServletTest {
                     {"items":[{"id":"item_123","quantity":1}]}
                     """;
             var first = sendCreateRequest(client, baseUri, body, "idem-create-1", "req-create-1");
-            var firstSessionId = Json.createReader(new StringReader(first.body())).readObject().getString("id");
+            var firstSessionId = json(first.body()).getString("id");
 
             var second = sendCreateRequest(client, baseUri, body, "idem-create-1", "req-create-2");
-            var secondSessionId = Json.createReader(new StringReader(second.body())).readObject().getString("id");
+            var secondSessionId = json(second.body()).getString("id");
 
             assertEquals(201, first.statusCode());
             assertEquals(201, second.statusCode());
@@ -123,7 +124,7 @@ final class CheckoutSessionServletTest {
                     """,
                     null,
                     "req-complete-1");
-            var sessionId = Json.createReader(new StringReader(create.body())).readObject().getString("id");
+            var sessionId = json(create.body()).getString("id");
 
             var completeBody = """
                     {
@@ -135,12 +136,12 @@ final class CheckoutSessionServletTest {
                     """;
             var first = sendCompleteRequest(client, baseUri, sessionId, completeBody, "idem-complete-1", "req-complete-2");
             assertEquals(200, first.statusCode());
-            var firstJson = Json.createReader(new StringReader(first.body())).readObject();
+            var firstJson = json(first.body());
             assertEquals("completed", firstJson.getString("status"));
             var firstOrderId = firstJson.getJsonObject("order").getString("id");
 
             var second = sendCompleteRequest(client, baseUri, sessionId, completeBody, "idem-complete-1", "req-complete-3");
-            var secondJson = Json.createReader(new StringReader(second.body())).readObject();
+            var secondJson = json(second.body());
             assertEquals(200, second.statusCode());
             assertEquals(firstOrderId, secondJson.getJsonObject("order").getString("id"));
             assertEquals("idem-complete-1", second.headers().firstValue("Idempotency-Key").orElseThrow());
@@ -162,7 +163,7 @@ final class CheckoutSessionServletTest {
                     """,
                     null,
                     "req-complete-4");
-            var sessionId = Json.createReader(new StringReader(create.body())).readObject().getString("id");
+            var sessionId = json(create.body()).getString("id");
 
             var body = """
                     {
@@ -186,9 +187,129 @@ final class CheckoutSessionServletTest {
             var second = sendCompleteRequest(client, baseUri, sessionId, mutatedBody, "idem-conflict", "req-complete-6");
 
             assertEquals(409, second.statusCode());
-            var errorJson = Json.createReader(new StringReader(second.body())).readObject();
+            var errorJson = json(second.body());
             assertEquals("request_not_idempotent", errorJson.getString("type"));
             assertEquals("idempotency_conflict", errorJson.getString("code"));
+        }
+    }
+
+    @Test
+    void createIdempotencyReplayReturnsOriginalSnapshotAfterUpdate() throws Exception {
+        try (var tls = TlsTestSupport.createTlsContext();
+                var server = newServer(tls.configuration())) {
+            server.start();
+            var client = HttpClient.newBuilder().sslContext(tls.sslContext()).build();
+            var baseUri = URI.create("https://localhost:" + server.httpsPort());
+            var body = """
+                    {"items":[{"id":"item_123","quantity":1}]}
+                    """;
+            var createResponse = sendCreateRequest(client, baseUri, body, "idem-snapshot", "req-initial");
+            assertEquals(201, createResponse.statusCode());
+            var originalJson = json(createResponse.body());
+            var sessionId = originalJson.getString("id");
+
+            var updateBody = """
+                    {"items":[{"id":"item_123","quantity":2}]}
+                    """;
+            var updateResponse = sendUpdateRequest(client, baseUri, sessionId, updateBody, "req-update");
+            assertEquals(200, updateResponse.statusCode());
+            var updatedJson = json(updateResponse.body());
+            assertEquals(2, updatedJson.getJsonArray("line_items").getJsonObject(0).getJsonObject("item").getInt("quantity"));
+
+            var replay = sendCreateRequest(client, baseUri, body, "idem-snapshot", "req-replay");
+            assertEquals(201, replay.statusCode());
+            assertEquals("idem-snapshot", replay.headers().firstValue("Idempotency-Key").orElseThrow());
+            assertEquals(originalJson, json(replay.body()));
+        }
+    }
+
+    @Test
+    void missingApiVersionReturns400() throws Exception {
+        try (var tls = TlsTestSupport.createTlsContext();
+                var server = newServer(tls.configuration())) {
+            server.start();
+            var client = HttpClient.newBuilder().sslContext(tls.sslContext()).build();
+            var baseUri = URI.create("https://localhost:" + server.httpsPort());
+            var request = HttpRequest.newBuilder(baseUri.resolve("/checkout_sessions"))
+                    .header("Authorization", "Bearer test")
+                    .header("Content-Type", "application/json")
+                    .header("Idempotency-Key", "idem-header-missing")
+                    .POST(HttpRequest.BodyPublishers.ofString("""
+                            {"items":[{"id":"item_123","quantity":1}]}
+                            """))
+                    .build();
+            var response = client.send(request, HttpResponse.BodyHandlers.ofString());
+            assertEquals(400, response.statusCode());
+            var errorJson = json(response.body());
+            assertEquals("invalid_request", errorJson.getString("type"));
+            assertEquals("missing_api_version", errorJson.getString("code"));
+        }
+    }
+
+    @Test
+    void completeWithoutIdempotencyKeyReturns400() throws Exception {
+        try (var tls = TlsTestSupport.createTlsContext();
+                var server = newServer(tls.configuration())) {
+            server.start();
+            var client = HttpClient.newBuilder().sslContext(tls.sslContext()).build();
+            var baseUri = URI.create("https://localhost:" + server.httpsPort());
+            var create = sendCreateRequest(
+                    client,
+                    baseUri,
+                    """
+                    {"items":[{"id":"item_123","quantity":1}]}
+                    """,
+                    null,
+                    "req-complete-missing");
+            var sessionId = json(create.body()).getString("id");
+
+            var request = HttpRequest.newBuilder(baseUri.resolve("/checkout_sessions/" + sessionId + "/complete"))
+                    .header("Authorization", "Bearer test")
+                    .header("API-Version", ApiVersion.SUPPORTED)
+                    .header("Content-Type", "application/json")
+                    .header("Request-Id", "req-missing-idem")
+                    .POST(HttpRequest.BodyPublishers.ofString("""
+                            {"payment_data":{"token":"tok","provider":"stripe"}}
+                            """))
+                    .build();
+            var response = client.send(request, HttpResponse.BodyHandlers.ofString());
+            assertEquals(400, response.statusCode());
+            var errorJson = json(response.body());
+            assertEquals("invalid_request", errorJson.getString("type"));
+            assertEquals("missing_idempotency_key", errorJson.getString("code"));
+        }
+    }
+
+    @Test
+    void updateWithUnknownFulfillmentOptionIdReturns409() throws Exception {
+        try (var tls = TlsTestSupport.createTlsContext();
+                var server = newServer(tls.configuration())) {
+            server.start();
+            var client = HttpClient.newBuilder().sslContext(tls.sslContext()).build();
+            var baseUri = URI.create("https://localhost:" + server.httpsPort());
+            var create = sendCreateRequest(
+                    client,
+                    baseUri,
+                    """
+                    {"items":[{"id":"item_123","quantity":1}]}
+                    """,
+                    null,
+                    "req-update-conflict");
+            var sessionId = json(create.body()).getString("id");
+
+            var response = sendUpdateRequest(
+                    client,
+                    baseUri,
+                    sessionId,
+                    """
+                    {"fulfillment_option_id":"invalid_option"}
+                    """,
+                    "req-update-invalid");
+
+            assertEquals(409, response.statusCode());
+            var errorJson = json(response.body());
+            assertEquals("invalid_request", errorJson.getString("type"));
+            assertEquals("state_conflict", errorJson.getString("code"));
         }
     }
 
@@ -219,6 +340,23 @@ final class CheckoutSessionServletTest {
         return client.send(builder.build(), HttpResponse.BodyHandlers.ofString());
     }
 
+    private static HttpResponse<String> sendUpdateRequest(
+            HttpClient client,
+            URI baseUri,
+            String sessionId,
+            String body,
+            String requestId) throws Exception {
+        return client.send(
+                HttpRequest.newBuilder(baseUri.resolve("/checkout_sessions/" + sessionId))
+                        .header("Authorization", "Bearer test")
+                        .header("API-Version", ApiVersion.SUPPORTED)
+                        .header("Content-Type", "application/json")
+                        .header("Request-Id", requestId)
+                        .POST(HttpRequest.BodyPublishers.ofString(body))
+                        .build(),
+                HttpResponse.BodyHandlers.ofString());
+    }
+
     private static HttpResponse<String> sendCompleteRequest(
             HttpClient client,
             URI baseUri,
@@ -234,5 +372,9 @@ final class CheckoutSessionServletTest {
                 .header("Request-Id", requestId)
                 .POST(HttpRequest.BodyPublishers.ofString(body));
         return client.send(builder.build(), HttpResponse.BodyHandlers.ofString());
+    }
+
+    private static JsonObject json(String body) {
+        return Json.createReader(new StringReader(body)).readObject();
     }
 }

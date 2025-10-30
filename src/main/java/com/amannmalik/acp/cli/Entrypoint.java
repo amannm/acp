@@ -7,7 +7,7 @@ public final class Entrypoint {
     public Entrypoint() {
     }
 
-    static void main(String[] args) {
+    public static void main(String[] args) {
         var mainSpec = CommandSpec.create().name("acp");
         mainSpec.usageMessage().description("Agentic Commerce Protocol CLI");
         var commandLine = new CommandLine(mainSpec);

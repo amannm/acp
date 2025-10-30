@@ -101,7 +101,7 @@ public final class InMemoryCheckoutSessionService implements CheckoutSessionServ
             if (existing == null) {
                 var session = createNewSession(request);
                 createdSession.set(session);
-                return new StoredCreateRequest(request, session.id().value());
+                return new StoredCreateRequest(request, session);
             }
             if (!existing.request().equals(request)) {
                 throw new CheckoutSessionIdempotencyConflictException(
@@ -112,7 +112,7 @@ public final class InMemoryCheckoutSessionService implements CheckoutSessionServ
         if (createdSession.get() != null) {
             return createdSession.get();
         }
-        return retrieve(new CheckoutSessionId(stored.sessionId()));
+        return stored.snapshot();
     }
 
     @Override
@@ -420,7 +420,7 @@ public final class InMemoryCheckoutSessionService implements CheckoutSessionServ
         webhookPublisher.publish(event);
     }
 
-    private record StoredCreateRequest(CheckoutSessionCreateRequest request, String sessionId) {
+    private record StoredCreateRequest(CheckoutSessionCreateRequest request, CheckoutSession snapshot) {
     }
 
     private record StoredCompleteRequest(CheckoutSessionCompleteRequest request) {

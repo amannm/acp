@@ -142,7 +142,7 @@ tasks.register<JavaExec>("generateManPage") {
     description = "Generate acp(1) man page"
     classpath = configurations.annotationProcessor.get() + sourceSets.main.get().runtimeClasspath
     mainClass.set("picocli.codegen.docgen.manpage.ManPageGenerator")
-    args("-d", "${projectDir}/man", "com.amannmalik.acp.Entrypoint")
+    args("-d", "${projectDir}/man", "com.amannmalik.acp.cli.Entrypoint")
 }
 
 spotbugs {

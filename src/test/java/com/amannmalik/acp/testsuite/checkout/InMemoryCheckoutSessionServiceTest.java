@@ -5,6 +5,7 @@ import com.amannmalik.acp.api.checkout.InMemoryCheckoutSessionService;
 import com.amannmalik.acp.api.checkout.model.CheckoutSessionCompleteRequest;
 import com.amannmalik.acp.api.checkout.model.CheckoutSessionCreateRequest;
 import com.amannmalik.acp.api.checkout.model.CheckoutSessionStatus;
+import com.amannmalik.acp.api.checkout.model.CheckoutSessionUpdateRequest;
 import com.amannmalik.acp.api.checkout.model.Item;
 import com.amannmalik.acp.api.checkout.model.PaymentData;
 import com.amannmalik.acp.api.checkout.model.PaymentProvider;
@@ -22,6 +23,7 @@ import java.util.List;
 import java.util.Map;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertNotEquals;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
@@ -88,6 +90,23 @@ final class InMemoryCheckoutSessionServiceTest {
         assertEquals(OrderWebhookEvent.OrderStatus.CONFIRMED, updateEvent.status());
         assertEquals(session.id().value(), updateEvent.checkoutSessionId());
         assertTrue(updateEvent.refunds().isEmpty());
+    }
+
+    @Test
+    void createIdempotencyReturnsOriginalSnapshotAfterUpdate() {
+        var service = new InMemoryCheckoutSessionService(
+                Map.of("item_test", 1200L), FIXED_CLOCK, new CurrencyCode("usd"), OrderWebhookPublisher.NOOP);
+        var request = new CheckoutSessionCreateRequest(List.of(new Item("item_test", 1)), null, null);
+        var original = service.create(request, "idem-keep-orig");
+
+        var updateRequest = new CheckoutSessionUpdateRequest(
+                List.of(new Item("item_test", 2)), null, null, original.fulfillmentOptionId());
+        var updated = service.update(original.id(), updateRequest);
+        assertNotEquals(original, updated);
+
+        var replay = service.create(request, "idem-keep-orig");
+        assertEquals(original, replay);
+        assertEquals(updated, service.retrieve(original.id()));
     }
 
     private record RecordingPublisher(List<OrderWebhookEvent> events) implements OrderWebhookPublisher {
