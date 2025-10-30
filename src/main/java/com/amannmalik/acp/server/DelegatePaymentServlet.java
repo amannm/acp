@@ -14,6 +14,7 @@ import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
 
 import java.io.IOException;
+import java.util.Locale;
 
 public final class DelegatePaymentServlet extends HttpServlet {
     private static final String APPLICATION_JSON = "application/json";
@@ -28,12 +29,14 @@ public final class DelegatePaymentServlet extends HttpServlet {
 
     @Override
     protected void doPost(HttpServletRequest req, HttpServletResponse resp) throws ServletException, IOException {
-        handleWithErrors(resp, () -> {
+        handleWithErrors(req, resp, () -> {
             validateHeaders(req);
-            var idempotencyKey = requireIdempotencyKey(req);
+            requireJsonPayload(req);
+            var idempotencyKey = normalizeHeader(req.getHeader("Idempotency-Key"));
             var delegateRequest = codec.readRequest(req.getInputStream());
             var response = service.create(delegateRequest, idempotencyKey);
             resp.setStatus(HttpServletResponse.SC_CREATED);
+            propagateCorrelationHeaders(req, resp);
             resp.setContentType(APPLICATION_JSON);
             codec.writeResponse(resp.getOutputStream(), response);
         });
@@ -41,39 +44,93 @@ public final class DelegatePaymentServlet extends HttpServlet {
 
     private void validateHeaders(HttpServletRequest req) {
         var apiVersion = req.getHeader("API-Version");
-        if (apiVersion == null || !apiVersion.equals(ApiVersion.SUPPORTED)) {
-            throw new IllegalArgumentException("API-Version MUST equal %s".formatted(ApiVersion.SUPPORTED));
+        if (apiVersion == null) {
+            throw new HttpProblem(
+                    HttpServletResponse.SC_BAD_REQUEST,
+                    ErrorResponse.ErrorType.INVALID_REQUEST,
+                    "missing_api_version",
+                    "API-Version header is required");
+        }
+        if (!ApiVersion.SUPPORTED.equals(apiVersion)) {
+            throw new HttpProblem(
+                    HttpServletResponse.SC_BAD_REQUEST,
+                    ErrorResponse.ErrorType.INVALID_REQUEST,
+                    "unsupported_api_version",
+                    "API-Version MUST equal %s".formatted(ApiVersion.SUPPORTED));
         }
         var authorization = req.getHeader("Authorization");
         if (authorization == null || authorization.isBlank()) {
-            throw new IllegalArgumentException("Authorization header is required");
+            throw new HttpProblem(
+                    HttpServletResponse.SC_UNAUTHORIZED,
+                    ErrorResponse.ErrorType.INVALID_REQUEST,
+                    "unauthorized",
+                    "Authorization header is required");
         }
+    }
+
+    private void requireJsonPayload(HttpServletRequest req) {
         var contentType = req.getHeader("Content-Type");
-        if (contentType == null || !contentType.startsWith(APPLICATION_JSON)) {
-            throw new IllegalArgumentException("Content-Type MUST be application/json");
+        if (contentType == null || !contentType.toLowerCase(Locale.ROOT).startsWith(APPLICATION_JSON)) {
+            throw new HttpProblem(
+                    HttpServletResponse.SC_UNSUPPORTED_MEDIA_TYPE,
+                    ErrorResponse.ErrorType.INVALID_REQUEST,
+                    "unsupported_media_type",
+                    "Content-Type MUST be application/json");
         }
     }
 
-    private String requireIdempotencyKey(HttpServletRequest req) {
-        var idemKey = req.getHeader("Idempotency-Key");
-        if (idemKey == null || idemKey.isBlank()) {
-            throw new IllegalArgumentException("Idempotency-Key header is required");
+    private static String normalizeHeader(String value) {
+        if (value == null || value.isBlank()) {
+            return null;
         }
-        return idemKey;
+        return value;
     }
 
-    private void handleWithErrors(HttpServletResponse resp, IOExceptionRunnable action) throws IOException {
+    private void handleWithErrors(HttpServletRequest req, HttpServletResponse resp, IOExceptionRunnable action)
+            throws IOException {
         try {
             action.run();
+        } catch (HttpProblem problem) {
+            sendError(resp, problem.status(), problem.errorType(), problem.code(), problem.getMessage(), problem.param(), req);
         } catch (IOException e) {
             throw e;
         } catch (DelegatePaymentConflictException e) {
-            sendError(resp, HttpServletResponse.SC_CONFLICT, ErrorResponse.ErrorType.INVALID_REQUEST, "idempotency_conflict", e.getMessage());
-        } catch (DelegatePaymentValidationException | JsonDecodingException | IllegalArgumentException e) {
-            sendError(resp, HttpServletResponse.SC_BAD_REQUEST, ErrorResponse.ErrorType.INVALID_REQUEST, "invalid_request", e.getMessage());
+            sendError(
+                    resp,
+                    HttpServletResponse.SC_CONFLICT,
+                    ErrorResponse.ErrorType.INVALID_REQUEST,
+                    "idempotency_conflict",
+                    e.getMessage(),
+                    null,
+                    req);
+        } catch (DelegatePaymentValidationException e) {
+            sendError(
+                    resp,
+                    422,
+                    ErrorResponse.ErrorType.INVALID_REQUEST,
+                    "invalid_request",
+                    e.getMessage(),
+                    null,
+                    req);
+        } catch (JsonDecodingException | IllegalArgumentException e) {
+            sendError(
+                    resp,
+                    HttpServletResponse.SC_BAD_REQUEST,
+                    ErrorResponse.ErrorType.INVALID_REQUEST,
+                    "invalid_request",
+                    e.getMessage(),
+                    null,
+                    req);
         } catch (Exception e) {
             var message = e.getMessage() == null ? "Unexpected server error" : e.getMessage();
-            sendError(resp, HttpServletResponse.SC_INTERNAL_SERVER_ERROR, ErrorResponse.ErrorType.PROCESSING_ERROR, "processing_error", message);
+            sendError(
+                    resp,
+                    HttpServletResponse.SC_INTERNAL_SERVER_ERROR,
+                    ErrorResponse.ErrorType.PROCESSING_ERROR,
+                    "processing_error",
+                    message,
+                    null,
+                    req);
         }
     }
 
@@ -82,10 +139,24 @@ public final class DelegatePaymentServlet extends HttpServlet {
             int status,
             ErrorResponse.ErrorType type,
             String code,
-            String message) throws IOException {
+            String message,
+            String param,
+            HttpServletRequest req) throws IOException {
         resp.setStatus(status);
+        propagateCorrelationHeaders(req, resp);
         resp.setContentType(APPLICATION_JSON);
-        codec.writeError(resp.getOutputStream(), new ErrorResponse(type, code, message, null));
+        codec.writeError(resp.getOutputStream(), new ErrorResponse(type, code, message, param));
+    }
+
+    private static void propagateCorrelationHeaders(HttpServletRequest req, HttpServletResponse resp) {
+        var requestId = req.getHeader("Request-Id");
+        if (requestId != null && !requestId.isBlank()) {
+            resp.setHeader("Request-Id", requestId);
+        }
+        var idempotencyKey = req.getHeader("Idempotency-Key");
+        if (idempotencyKey != null && !idempotencyKey.isBlank()) {
+            resp.setHeader("Idempotency-Key", idempotencyKey);
+        }
     }
 
     @FunctionalInterface

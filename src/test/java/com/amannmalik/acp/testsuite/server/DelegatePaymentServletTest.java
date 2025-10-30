@@ -65,6 +65,8 @@ final class DelegatePaymentServletTest {
             var response = sendDelegatePaymentRequest(client, serverBaseUri(server), "idem_create", VALID_REQUEST_BODY);
 
             assertEquals(201, response.statusCode());
+            assertEquals("req-idem_create", response.headers().firstValue("Request-Id").orElseThrow());
+            assertEquals("idem_create", response.headers().firstValue("Idempotency-Key").orElseThrow());
             var json = Json.createReader(new StringReader(response.body())).readObject();
             assertTrue(json.containsKey("id"));
             assertTrue(json.getJsonObject("metadata").containsKey("merchant_id"));
@@ -93,7 +95,7 @@ final class DelegatePaymentServletTest {
     }
 
     @Test
-    void expiredAllowanceReturns400() throws Exception {
+    void expiredAllowanceReturns422() throws Exception {
         try (var server = new JettyHttpServer(
                 0,
                 new InMemoryCheckoutSessionService(),
@@ -103,7 +105,7 @@ final class DelegatePaymentServletTest {
             var expiredBody = VALID_REQUEST_BODY.replace("2030-01-01T00:00:00Z", "2020-01-01T00:00:00Z");
             var response = sendDelegatePaymentRequest(client, serverBaseUri(server), "idem_expired", expiredBody);
 
-            assertEquals(400, response.statusCode());
+            assertEquals(422, response.statusCode());
             assertTrue(response.body().contains("expires_at"));
         }
     }
@@ -119,6 +121,7 @@ final class DelegatePaymentServletTest {
                 .header("API-Version", ApiVersion.SUPPORTED)
                 .header("Content-Type", "application/json")
                 .header("Idempotency-Key", idemKey)
+                .header("Request-Id", "req-" + idemKey)
                 .POST(HttpRequest.BodyPublishers.ofString(body))
                 .build();
         return client.send(request, HttpResponse.BodyHandlers.ofString());

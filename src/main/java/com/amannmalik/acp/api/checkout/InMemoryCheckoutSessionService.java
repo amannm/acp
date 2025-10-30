@@ -32,6 +32,7 @@ import java.util.Objects;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ConcurrentMap;
 import java.util.concurrent.atomic.AtomicLong;
+import java.util.concurrent.atomic.AtomicReference;
 import java.util.stream.Collectors;
 
 public final class InMemoryCheckoutSessionService implements CheckoutSessionService {
@@ -44,6 +45,9 @@ public final class InMemoryCheckoutSessionService implements CheckoutSessionServ
     private static final BigDecimal TAX_RATE = new BigDecimal("0.0825");
 
     private final ConcurrentMap<String, CheckoutSession> sessions = new ConcurrentHashMap<>();
+    private final ConcurrentMap<String, StoredCreateRequest> createIdempotency = new ConcurrentHashMap<>();
+    private final ConcurrentMap<CompleteIdempotencyKey, StoredCompleteRequest> completeIdempotency =
+            new ConcurrentHashMap<>();
     private final AtomicLong sessionSequence = new AtomicLong(1);
     private final AtomicLong lineItemSequence = new AtomicLong(1);
     private final AtomicLong orderSequence = new AtomicLong(1);
@@ -62,18 +66,27 @@ public final class InMemoryCheckoutSessionService implements CheckoutSessionServ
     }
 
     @Override
-    public CheckoutSession create(CheckoutSessionCreateRequest request) {
-        var id = new CheckoutSessionId(nextSessionId());
-        var session = assemble(
-                id,
-                request.buyer(),
-                request.fulfillmentAddress(),
-                null,
-                request.items(),
-                CheckoutSessionStatus.READY_FOR_PAYMENT,
-                null);
-        sessions.put(id.value(), session);
-        return session;
+    public CheckoutSession create(CheckoutSessionCreateRequest request, String idempotencyKey) {
+        var normalizedKey = normalizeIdempotencyKey(idempotencyKey);
+        if (normalizedKey == null) {
+            return createNewSession(request);
+        }
+        var createdSession = new AtomicReference<CheckoutSession>();
+        var stored = createIdempotency.compute(normalizedKey, (key, existing) -> {
+            if (existing == null) {
+                var session = createNewSession(request);
+                createdSession.set(session);
+                return new StoredCreateRequest(request, session.id().value());
+            }
+            if (!existing.request().equals(request)) {
+                throw new CheckoutSessionConflictException("Same Idempotency-Key used with different parameters");
+            }
+            return existing;
+        });
+        if (createdSession.get() != null) {
+            return createdSession.get();
+        }
+        return retrieve(new CheckoutSessionId(stored.sessionId()));
     }
 
     @Override
@@ -105,32 +118,29 @@ public final class InMemoryCheckoutSessionService implements CheckoutSessionServ
     }
 
     @Override
-    public CheckoutSession complete(CheckoutSessionId id, CheckoutSessionCompleteRequest request) {
-        return sessions.compute(id.value(), (key, current) -> {
-            if (current == null) {
-                throw new CheckoutSessionNotFoundException(id);
+    public CheckoutSession complete(
+            CheckoutSessionId id, CheckoutSessionCompleteRequest request, String idempotencyKey) {
+        var normalizedKey = normalizeIdempotencyKey(idempotencyKey);
+        if (normalizedKey == null) {
+            return completeInternal(id, request);
+        }
+        var completedSession = new AtomicReference<CheckoutSession>();
+        var key = new CompleteIdempotencyKey(id.value(), normalizedKey);
+        completeIdempotency.compute(key, (k, existing) -> {
+            if (existing == null) {
+                completedSession.set(completeInternal(id, request));
+                return new StoredCompleteRequest(request);
             }
-            if (current.status() == CheckoutSessionStatus.CANCELED) {
-                throw new CheckoutSessionConflictException("Cannot complete a canceled session");
+            if (!existing.request().equals(request)) {
+                throw new CheckoutSessionConflictException("Same Idempotency-Key used with different parameters");
             }
-            if (current.status() == CheckoutSessionStatus.COMPLETED) {
-                return current;
-            }
-            if (request.paymentData().provider() != PAYMENT_PROVIDER.provider()) {
-                throw new CheckoutSessionConflictException("Unsupported payment provider: " + request.paymentData().provider());
-            }
-            var buyer = request.buyer() != null ? request.buyer() : current.buyer();
-            var orderId = nextOrderId();
-            var order = new Order(orderId, id, URI.create("https://merchant.example.com/orders/" + orderId));
-            return assemble(
-                    id,
-                    buyer,
-                    current.fulfillmentAddress(),
-                    current.fulfillmentOptionId(),
-                    extractItems(current),
-                    CheckoutSessionStatus.COMPLETED,
-                    order);
+            return existing;
         });
+        var session = completedSession.get();
+        if (session != null) {
+            return session;
+        }
+        return retrieve(id);
     }
 
     @Override
@@ -140,10 +150,10 @@ public final class InMemoryCheckoutSessionService implements CheckoutSessionServ
                 throw new CheckoutSessionNotFoundException(id);
             }
             if (current.status() == CheckoutSessionStatus.COMPLETED) {
-                throw new CheckoutSessionConflictException("Cannot cancel a completed session");
+                throw new CheckoutSessionMethodNotAllowedException("Cannot cancel a completed session");
             }
             if (current.status() == CheckoutSessionStatus.CANCELED) {
-                return current;
+                throw new CheckoutSessionMethodNotAllowedException("Checkout session already canceled");
             }
             return assemble(
                     id,
@@ -323,4 +333,60 @@ public final class InMemoryCheckoutSessionService implements CheckoutSessionServ
                 "item_456", 3000L,
                 "item_789", 5000L);
     }
+
+    private CheckoutSession createNewSession(CheckoutSessionCreateRequest request) {
+        var id = new CheckoutSessionId(nextSessionId());
+        var session = assemble(
+                id,
+                request.buyer(),
+                request.fulfillmentAddress(),
+                null,
+                request.items(),
+                CheckoutSessionStatus.READY_FOR_PAYMENT,
+                null);
+        sessions.put(id.value(), session);
+        return session;
+    }
+
+    private CheckoutSession completeInternal(CheckoutSessionId id, CheckoutSessionCompleteRequest request) {
+        return sessions.compute(id.value(), (key, current) -> {
+            if (current == null) {
+                throw new CheckoutSessionNotFoundException(id);
+            }
+            if (current.status() == CheckoutSessionStatus.CANCELED) {
+                throw new CheckoutSessionConflictException("Cannot complete a canceled session");
+            }
+            if (current.status() == CheckoutSessionStatus.COMPLETED) {
+                return current;
+            }
+            if (request.paymentData().provider() != PAYMENT_PROVIDER.provider()) {
+                throw new CheckoutSessionConflictException("Unsupported payment provider: " + request.paymentData().provider());
+            }
+            var buyer = request.buyer() != null ? request.buyer() : current.buyer();
+            var orderId = nextOrderId();
+            var order = new Order(orderId, id, URI.create("https://merchant.example.com/orders/" + orderId));
+            return assemble(
+                    id,
+                    buyer,
+                    current.fulfillmentAddress(),
+                    current.fulfillmentOptionId(),
+                    extractItems(current),
+                    CheckoutSessionStatus.COMPLETED,
+                    order);
+        });
+    }
+
+    private static String normalizeIdempotencyKey(String key) {
+        if (key == null) {
+            return null;
+        }
+        var trimmed = key.trim();
+        return trimmed.isEmpty() ? null : trimmed;
+    }
+
+    private record StoredCreateRequest(CheckoutSessionCreateRequest request, String sessionId) {}
+
+    private record StoredCompleteRequest(CheckoutSessionCompleteRequest request) {}
+
+    private record CompleteIdempotencyKey(String sessionId, String idempotencyKey) {}
 }

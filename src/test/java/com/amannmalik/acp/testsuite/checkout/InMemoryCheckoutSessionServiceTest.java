@@ -28,7 +28,7 @@ final class InMemoryCheckoutSessionServiceTest {
                 null,
                 null);
 
-        var session = service.create(request);
+        var session = service.create(request, null);
 
         assertEquals(CheckoutSessionStatus.READY_FOR_PAYMENT, session.status());
         assertEquals("usd", session.currency().value());
