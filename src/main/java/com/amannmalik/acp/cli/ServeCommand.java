@@ -4,6 +4,7 @@ import com.amannmalik.acp.api.checkout.InMemoryCheckoutSessionService;
 import com.amannmalik.acp.api.delegatepayment.InMemoryDelegatePaymentService;
 import com.amannmalik.acp.api.shared.CurrencyCode;
 import com.amannmalik.acp.server.JettyHttpServer;
+import com.amannmalik.acp.server.TlsConfiguration;
 import com.amannmalik.acp.server.security.ConfigurableRequestAuthenticator;
 import com.amannmalik.acp.server.security.RequestAuthenticator;
 import com.amannmalik.acp.server.security.SecurityConfiguration;
@@ -16,6 +17,7 @@ import java.time.Clock;
 import java.time.Duration;
 import java.net.URI;
 import java.net.http.HttpClient;
+import java.nio.file.Path;
 import java.util.Base64;
 import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
@@ -23,13 +25,32 @@ import java.util.List;
 import java.util.Map;
 import java.util.Set;
 import java.util.concurrent.Callable;
+import java.util.Arrays;
 
 @CommandLine.Command(name = "serve", description = "Start the Agentic Commerce Protocol reference server")
 public final class ServeCommand implements Callable<Integer> {
     public ServeCommand() {}
 
-    @CommandLine.Option(names = "--port", defaultValue = "8080", description = "TCP port to bind (default: ${DEFAULT-VALUE})")
-    int port;
+    @CommandLine.Option(names = "--port", defaultValue = "8443", description = "HTTPS port to bind (default: ${DEFAULT-VALUE})")
+    int httpsPort;
+
+    @CommandLine.Option(names = "--http-port", defaultValue = "8080", description = "Plain HTTP port when --allow-insecure-http is set (default: ${DEFAULT-VALUE})")
+    int httpPort;
+
+    @CommandLine.Option(names = "--allow-insecure-http", defaultValue = "false", description = "Enable an additional plain HTTP listener (insecure; default: disabled)")
+    boolean allowInsecureHttp;
+
+    @CommandLine.Option(names = "--tls-keystore", description = "Path to TLS keystore (e.g., PKCS12)")
+    Path tlsKeystore;
+
+    @CommandLine.Option(names = "--tls-keystore-password", description = "Password for TLS keystore")
+    String tlsKeystorePassword;
+
+    @CommandLine.Option(names = "--tls-key-password", description = "Password for private key (defaults to keystore password)")
+    String tlsKeyPassword;
+
+    @CommandLine.Option(names = "--tls-keystore-type", defaultValue = "PKCS12", description = "Keystore type (default: ${DEFAULT-VALUE})")
+    String tlsKeystoreType;
 
     @CommandLine.Option(
             names = "--price",
@@ -79,12 +100,32 @@ public final class ServeCommand implements Callable<Integer> {
                 : new InMemoryCheckoutSessionService(priceBook, Clock.systemUTC(), new CurrencyCode("usd"), orderPublisher);
         var delegatePaymentService = new InMemoryDelegatePaymentService();
         var authenticator = authenticator();
-        try (var server = new JettyHttpServer(port, checkoutService, delegatePaymentService, authenticator)) {
+        var serverConfig = serverConfiguration();
+        try (var server = new JettyHttpServer(serverConfig, checkoutService, delegatePaymentService, authenticator)) {
             server.start();
-            System.out.printf("ACP server listening on http://localhost:%d%n", server.port());
+            if (server.hasHttps()) {
+                System.out.printf("ACP server listening on https://localhost:%d%n", server.httpsPort());
+            }
+            if (server.hasHttp()) {
+                System.out.printf("(insecure) HTTP listener enabled at http://localhost:%d%n", server.httpPort());
+            }
             server.join();
         }
         return 0;
+    }
+
+    private JettyHttpServer.Configuration serverConfiguration() {
+        var tls = tlsConfiguration();
+        if (tls != null && allowInsecureHttp) {
+            return JettyHttpServer.Configuration.httpAndHttps(httpPort, tls);
+        }
+        if (tls != null) {
+            return JettyHttpServer.Configuration.httpsOnly(tls);
+        }
+        if (allowInsecureHttp) {
+            return JettyHttpServer.Configuration.httpOnly(httpPort);
+        }
+        throw new IllegalArgumentException("TLS configuration required unless --allow-insecure-http is specified");
     }
 
     private Map<String, Long> parsePriceOverrides() {
@@ -107,6 +148,25 @@ public final class ServeCommand implements Callable<Integer> {
         var secrets = parseSignatureSecrets();
         var configuration = new SecurityConfiguration(tokens, secrets, maxTimestampSkew);
         return new ConfigurableRequestAuthenticator(configuration, Clock.systemUTC());
+    }
+
+    private TlsConfiguration tlsConfiguration() {
+        if (tlsKeystore == null && tlsKeystorePassword == null && tlsKeyPassword == null) {
+            return null;
+        }
+        if (tlsKeystore == null || tlsKeystorePassword == null) {
+            throw new IllegalArgumentException("--tls-keystore and --tls-keystore-password MUST be provided together");
+        }
+        var keystorePasswordChars = tlsKeystorePassword.toCharArray();
+        var keyPasswordChars = tlsKeyPassword != null ? tlsKeyPassword.toCharArray() : null;
+        try {
+            return new TlsConfiguration(tlsKeystore, keystorePasswordChars, keyPasswordChars, tlsKeystoreType, httpsPort);
+        } finally {
+            Arrays.fill(keystorePasswordChars, '\0');
+            if (keyPasswordChars != null) {
+                Arrays.fill(keyPasswordChars, '\0');
+            }
+        }
     }
 
     private Set<String> parseBearerTokens() {

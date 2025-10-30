@@ -6,6 +6,8 @@ import com.amannmalik.acp.api.shared.ApiVersion;
 import com.amannmalik.acp.server.JettyHttpServer;
 import com.amannmalik.acp.server.security.ConfigurableRequestAuthenticator;
 import com.amannmalik.acp.server.security.SecurityConfiguration;
+import com.amannmalik.acp.server.TlsConfiguration;
+import com.amannmalik.acp.testutil.TlsTestSupport;
 
 import jakarta.json.Json;
 
@@ -61,9 +63,10 @@ final class DelegatePaymentServletTest {
 
     @Test
     void createDelegatePaymentToken() throws Exception {
-        try (var server = newServer()) {
+        try (var tls = TlsTestSupport.createTlsContext();
+                var server = newServer(tls.configuration())) {
             server.start();
-            var client = HttpClient.newHttpClient();
+            var client = HttpClient.newBuilder().sslContext(tls.sslContext()).build();
             var response = sendDelegatePaymentRequest(client, serverBaseUri(server), "idem_create", VALID_REQUEST_BODY);
 
             assertEquals(201, response.statusCode());
@@ -77,9 +80,10 @@ final class DelegatePaymentServletTest {
 
     @Test
     void idempotencyConflictReturns409() throws Exception {
-        try (var server = newServer()) {
+        try (var tls = TlsTestSupport.createTlsContext();
+                var server = newServer(tls.configuration())) {
             server.start();
-            var client = HttpClient.newHttpClient();
+            var client = HttpClient.newBuilder().sslContext(tls.sslContext()).build();
             var baseBody = VALID_REQUEST_BODY;
             var idemKey = "idem_conflict";
             var first = sendDelegatePaymentRequest(client, serverBaseUri(server), idemKey, baseBody);
@@ -95,9 +99,10 @@ final class DelegatePaymentServletTest {
 
     @Test
     void expiredAllowanceReturns422() throws Exception {
-        try (var server = newServer()) {
+        try (var tls = TlsTestSupport.createTlsContext();
+                var server = newServer(tls.configuration())) {
             server.start();
-            var client = HttpClient.newHttpClient();
+            var client = HttpClient.newBuilder().sslContext(tls.sslContext()).build();
             var expiredBody = VALID_REQUEST_BODY.replace("2030-01-01T00:00:00Z", "2020-01-01T00:00:00Z");
             var response = sendDelegatePaymentRequest(client, serverBaseUri(server), "idem_expired", expiredBody);
 
@@ -107,7 +112,7 @@ final class DelegatePaymentServletTest {
     }
 
     private static URI serverBaseUri(JettyHttpServer server) {
-        return URI.create("http://localhost:" + server.port());
+        return URI.create("https://localhost:" + server.httpsPort());
     }
 
     private static HttpResponse<String> sendDelegatePaymentRequest(HttpClient client, URI baseUri, String idemKey, String body)
@@ -123,12 +128,12 @@ final class DelegatePaymentServletTest {
         return client.send(request, HttpResponse.BodyHandlers.ofString());
     }
 
-    private static JettyHttpServer newServer() {
+    private static JettyHttpServer newServer(TlsConfiguration tlsConfiguration) {
         var checkout = new InMemoryCheckoutSessionService();
         var delegate = new InMemoryDelegatePaymentService();
         var authenticator = new ConfigurableRequestAuthenticator(
                 new SecurityConfiguration(Set.of("test"), Map.of(), java.time.Duration.ofMinutes(5)),
                 Clock.systemUTC());
-        return new JettyHttpServer(0, checkout, delegate, authenticator);
+        return new JettyHttpServer(JettyHttpServer.Configuration.httpsOnly(tlsConfiguration), checkout, delegate, authenticator);
     }
 }

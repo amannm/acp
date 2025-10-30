@@ -4,8 +4,10 @@ import com.amannmalik.acp.api.checkout.InMemoryCheckoutSessionService;
 import com.amannmalik.acp.api.delegatepayment.InMemoryDelegatePaymentService;
 import com.amannmalik.acp.api.shared.ApiVersion;
 import com.amannmalik.acp.server.JettyHttpServer;
+import com.amannmalik.acp.server.TlsConfiguration;
 import com.amannmalik.acp.server.security.ConfigurableRequestAuthenticator;
 import com.amannmalik.acp.server.security.SecurityConfiguration;
+import com.amannmalik.acp.testutil.TlsTestSupport;
 
 import jakarta.json.Json;
 
@@ -26,10 +28,11 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 final class CheckoutSessionServletTest {
     @Test
     void createAndRetrieveSession() throws Exception {
-        try (var server = newServer()) {
+        try (var tls = TlsTestSupport.createTlsContext();
+                var server = newServer(tls.configuration())) {
             server.start();
-            var client = HttpClient.newHttpClient();
-            var baseUri = URI.create("http://localhost:" + server.port());
+            var client = HttpClient.newBuilder().sslContext(tls.sslContext()).build();
+            var baseUri = URI.create("https://localhost:" + server.httpsPort());
             var createResponse = sendCreateRequest(
                     client,
                     baseUri,
@@ -58,10 +61,11 @@ final class CheckoutSessionServletTest {
 
     @Test
     void createIdempotencyReturnsExistingSessionState() throws Exception {
-        try (var server = newServer()) {
+        try (var tls = TlsTestSupport.createTlsContext();
+                var server = newServer(tls.configuration())) {
             server.start();
-            var client = HttpClient.newHttpClient();
-            var baseUri = URI.create("http://localhost:" + server.port());
+            var client = HttpClient.newBuilder().sslContext(tls.sslContext()).build();
+            var baseUri = URI.create("https://localhost:" + server.httpsPort());
             var body = """
                     {"items":[{"id":"item_123","quantity":1}]}
                     """;
@@ -80,10 +84,11 @@ final class CheckoutSessionServletTest {
 
     @Test
     void createIdempotencyConflictReturns409() throws Exception {
-        try (var server = newServer()) {
+        try (var tls = TlsTestSupport.createTlsContext();
+                var server = newServer(tls.configuration())) {
             server.start();
-            var client = HttpClient.newHttpClient();
-            var baseUri = URI.create("http://localhost:" + server.port());
+            var client = HttpClient.newBuilder().sslContext(tls.sslContext()).build();
+            var baseUri = URI.create("https://localhost:" + server.httpsPort());
             var key = "idem-create-conflict";
             var body = """
                     {"items":[{"id":"item_123","quantity":1}]}
@@ -103,10 +108,11 @@ final class CheckoutSessionServletTest {
 
     @Test
     void completeIdempotencyReturnsSameOrder() throws Exception {
-        try (var server = newServer()) {
+        try (var tls = TlsTestSupport.createTlsContext();
+                var server = newServer(tls.configuration())) {
             server.start();
-            var client = HttpClient.newHttpClient();
-            var baseUri = URI.create("http://localhost:" + server.port());
+            var client = HttpClient.newBuilder().sslContext(tls.sslContext()).build();
+            var baseUri = URI.create("https://localhost:" + server.httpsPort());
             var create = sendCreateRequest(
                     client,
                     baseUri,
@@ -141,10 +147,11 @@ final class CheckoutSessionServletTest {
 
     @Test
     void completeIdempotencyConflictReturns409() throws Exception {
-        try (var server = newServer()) {
+        try (var tls = TlsTestSupport.createTlsContext();
+                var server = newServer(tls.configuration())) {
             server.start();
-            var client = HttpClient.newHttpClient();
-            var baseUri = URI.create("http://localhost:" + server.port());
+            var client = HttpClient.newBuilder().sslContext(tls.sslContext()).build();
+            var baseUri = URI.create("https://localhost:" + server.httpsPort());
             var create = sendCreateRequest(
                     client,
                     baseUri,
@@ -181,13 +188,13 @@ final class CheckoutSessionServletTest {
         }
     }
 
-    private static JettyHttpServer newServer() {
+    private static JettyHttpServer newServer(TlsConfiguration tlsConfiguration) {
         var checkout = new InMemoryCheckoutSessionService();
         var delegate = new InMemoryDelegatePaymentService();
         var authenticator = new ConfigurableRequestAuthenticator(
                 new SecurityConfiguration(Set.of("test"), Map.of(), java.time.Duration.ofMinutes(5)),
                 Clock.systemUTC());
-        return new JettyHttpServer(0, checkout, delegate, authenticator);
+        return new JettyHttpServer(JettyHttpServer.Configuration.httpsOnly(tlsConfiguration), checkout, delegate, authenticator);
     }
 
     private static HttpResponse<String> sendCreateRequest(
