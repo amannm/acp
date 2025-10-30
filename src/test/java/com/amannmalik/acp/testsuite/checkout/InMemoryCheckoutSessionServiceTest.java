@@ -78,7 +78,7 @@ final class InMemoryCheckoutSessionServiceTest {
         var event = events.get(0);
         assertEquals(OrderWebhookEvent.Type.ORDER_CREATE, event.type());
         assertEquals(session.id().value(), event.checkoutSessionId());
-        assertEquals("completed", event.status());
+        assertEquals(OrderWebhookEvent.OrderStatus.CREATED, event.status());
         assertTrue(event.permalinkUrl().toString().contains("/orders/"));
     }
 

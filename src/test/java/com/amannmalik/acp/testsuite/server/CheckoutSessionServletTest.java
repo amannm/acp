@@ -102,7 +102,9 @@ final class CheckoutSessionServletTest {
             var second = sendCreateRequest(client, baseUri, mutated, key, "req-create-4");
 
             assertEquals(409, second.statusCode());
-            assertTrue(second.body().contains("idempotency_conflict"));
+            var errorJson = Json.createReader(new StringReader(second.body())).readObject();
+            assertEquals("invalid_request", errorJson.getString("type"));
+            assertEquals("idempotency_conflict", errorJson.getString("code"));
         }
     }
 
@@ -184,7 +186,9 @@ final class CheckoutSessionServletTest {
             var second = sendCompleteRequest(client, baseUri, sessionId, mutatedBody, "idem-conflict", "req-complete-6");
 
             assertEquals(409, second.statusCode());
-            assertTrue(second.body().contains("idempotency_conflict"));
+            var errorJson = Json.createReader(new StringReader(second.body())).readObject();
+            assertEquals("invalid_request", errorJson.getString("type"));
+            assertEquals("idempotency_conflict", errorJson.getString("code"));
         }
     }
 

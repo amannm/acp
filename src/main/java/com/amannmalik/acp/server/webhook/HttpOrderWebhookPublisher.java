@@ -62,7 +62,7 @@ public final class HttpOrderWebhookPublisher implements OrderWebhookPublisher {
                 .add("type", "order")
                 .add("checkout_session_id", event.checkoutSessionId())
                 .add("permalink_url", event.permalinkUrl().toString())
-                .add("status", event.status())
+                .add("status", event.status().jsonValue())
                 .add("refunds", Json.createArrayBuilder());
         return Json.createObjectBuilder()
                 .add("type", event.type().jsonValue())

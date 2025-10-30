@@ -35,6 +35,8 @@ final class DelegatePaymentServletTest {
                 "number": "4242424242424242",
                 "exp_month": "11",
                 "exp_year": "2026",
+                "cryptogram": "AAECAw==",
+                "eci_value": "05",
                 "display_card_funding_type": "credit",
                 "metadata": {"issuer": "demo"}
               },

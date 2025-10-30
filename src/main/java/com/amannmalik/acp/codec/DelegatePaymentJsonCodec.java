@@ -62,6 +62,8 @@ public final class DelegatePaymentJsonCodec {
         }
         var cardNumberType = PaymentMethodCard.CardNumberType.valueOf(
                 JsonSupport.requireString(object, "card_number_type").toUpperCase());
+        var cryptogram = JsonSupport.optionalString(object, "cryptogram");
+        var eciValue = JsonSupport.optionalString(object, "eci_value");
         List<PaymentMethodCard.Check> checks;
         if (object.containsKey("checks_performed") && !object.isNull("checks_performed")) {
             checks = object.getJsonArray("checks_performed").stream()
@@ -80,6 +82,8 @@ public final class DelegatePaymentJsonCodec {
                 JsonSupport.optionalString(object, "exp_year"),
                 JsonSupport.optionalString(object, "name"),
                 JsonSupport.optionalString(object, "cvc"),
+                cryptogram,
+                eciValue,
                 checks,
                 JsonSupport.optionalString(object, "iin"),
                 PaymentMethodCard.DisplayCardFundingType.valueOf(

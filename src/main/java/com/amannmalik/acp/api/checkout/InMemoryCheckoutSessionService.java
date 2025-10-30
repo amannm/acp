@@ -31,7 +31,6 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
-import java.util.Locale;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ConcurrentMap;
 import java.util.concurrent.atomic.AtomicLong;
@@ -403,9 +402,17 @@ public final class InMemoryCheckoutSessionService implements CheckoutSessionServ
         var event = new OrderWebhookEvent(
                 OrderWebhookEvent.Type.ORDER_CREATE,
                 session.id().value(),
-                session.status().name().toLowerCase(Locale.ROOT),
+                webhookStatusFor(session.status()),
                 order.permalinkUrl());
         webhookPublisher.publish(event);
+    }
+
+    private static OrderWebhookEvent.OrderStatus webhookStatusFor(CheckoutSessionStatus status) {
+        return switch (status) {
+            case COMPLETED -> OrderWebhookEvent.OrderStatus.CREATED;
+            case CANCELED -> OrderWebhookEvent.OrderStatus.CANCELED;
+            default -> throw new IllegalStateException("Unsupported checkout status for order webhook: " + status);
+        };
     }
 
     private static String normalizeIdempotencyKey(String key) {

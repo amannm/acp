@@ -13,6 +13,8 @@ public record PaymentMethodCard(
         String expYear,
         String name,
         String cvc,
+        String cryptogram,
+        String eciValue,
         List<Check> checksPerformed,
         String iin,
         DisplayCardFundingType displayCardFundingType,
@@ -51,6 +53,11 @@ public record PaymentMethodCard(
         }
         if (cvc != null && cvc.length() > 4) {
             throw new IllegalArgumentException("payment_method.cvc MUST be <= 4 digits");
+        }
+        cryptogram = normalizeOptional(cryptogram);
+        eciValue = normalizeOptional(eciValue);
+        if (eciValue != null && eciValue.length() > 2) {
+            throw new IllegalArgumentException("payment_method.eci_value MUST be <= 2 characters");
         }
         if (iin != null && iin.length() > 6) {
             throw new IllegalArgumentException("payment_method.iin MUST be <= 6 digits");
