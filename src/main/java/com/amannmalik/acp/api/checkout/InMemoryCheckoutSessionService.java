@@ -80,7 +80,8 @@ public final class InMemoryCheckoutSessionService implements CheckoutSessionServ
                 return new StoredCreateRequest(request, session.id().value());
             }
             if (!existing.request().equals(request)) {
-                throw new CheckoutSessionConflictException("Same Idempotency-Key used with different parameters");
+                throw new CheckoutSessionIdempotencyConflictException(
+                        "Same Idempotency-Key used with different parameters");
             }
             return existing;
         });
@@ -133,7 +134,8 @@ public final class InMemoryCheckoutSessionService implements CheckoutSessionServ
                 return new StoredCompleteRequest(request);
             }
             if (!existing.request().equals(request)) {
-                throw new CheckoutSessionConflictException("Same Idempotency-Key used with different parameters");
+                throw new CheckoutSessionIdempotencyConflictException(
+                        "Same Idempotency-Key used with different parameters");
             }
             return existing;
         });

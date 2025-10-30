@@ -1,6 +1,7 @@
 package com.amannmalik.acp.server;
 
 import com.amannmalik.acp.api.checkout.CheckoutSessionConflictException;
+import com.amannmalik.acp.api.checkout.CheckoutSessionIdempotencyConflictException;
 import com.amannmalik.acp.api.checkout.CheckoutSessionMethodNotAllowedException;
 import com.amannmalik.acp.api.checkout.CheckoutSessionNotFoundException;
 import com.amannmalik.acp.api.checkout.CheckoutSessionService;
@@ -163,6 +164,15 @@ public final class CheckoutSessionServlet extends HttpServlet {
                     HttpServletResponse.SC_NOT_FOUND,
                     ErrorResponse.ErrorType.INVALID_REQUEST,
                     "not_found",
+                    e.getMessage(),
+                    null,
+                    req);
+        } catch (CheckoutSessionIdempotencyConflictException e) {
+            sendError(
+                    resp,
+                    HttpServletResponse.SC_CONFLICT,
+                    ErrorResponse.ErrorType.REQUEST_NOT_IDEMPOTENT,
+                    "idempotency_conflict",
                     e.getMessage(),
                     null,
                     req);

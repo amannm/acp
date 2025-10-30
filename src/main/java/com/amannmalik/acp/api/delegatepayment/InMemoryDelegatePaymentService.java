@@ -34,7 +34,8 @@ public final class InMemoryDelegatePaymentService implements DelegatePaymentServ
                 return new StoredRecord(request, issueToken(request, idempotencyKey));
             }
             if (!current.request().equals(request)) {
-                throw new DelegatePaymentConflictException("Same Idempotency-Key used with different parameters");
+                throw new DelegatePaymentIdempotencyConflictException(
+                        "Same Idempotency-Key used with different parameters");
             }
             return current;
         });

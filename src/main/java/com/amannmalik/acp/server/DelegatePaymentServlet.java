@@ -1,6 +1,7 @@
 package com.amannmalik.acp.server;
 
 import com.amannmalik.acp.api.delegatepayment.DelegatePaymentConflictException;
+import com.amannmalik.acp.api.delegatepayment.DelegatePaymentIdempotencyConflictException;
 import com.amannmalik.acp.api.delegatepayment.DelegatePaymentService;
 import com.amannmalik.acp.api.delegatepayment.DelegatePaymentValidationException;
 import com.amannmalik.acp.api.shared.ApiVersion;
@@ -94,6 +95,15 @@ public final class DelegatePaymentServlet extends HttpServlet {
             sendError(resp, problem.status(), problem.errorType(), problem.code(), problem.getMessage(), problem.param(), req);
         } catch (IOException e) {
             throw e;
+        } catch (DelegatePaymentIdempotencyConflictException e) {
+            sendError(
+                    resp,
+                    HttpServletResponse.SC_CONFLICT,
+                    ErrorResponse.ErrorType.INVALID_REQUEST,
+                    "idempotency_conflict",
+                    e.getMessage(),
+                    null,
+                    req);
         } catch (DelegatePaymentConflictException e) {
             sendError(
                     resp,
