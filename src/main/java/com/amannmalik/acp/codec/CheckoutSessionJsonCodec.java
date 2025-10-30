@@ -12,6 +12,9 @@ import java.util.List;
 
 /// See specification/2025-09-29/spec/openapi/openapi.agentic_checkout.yaml
 public final class CheckoutSessionJsonCodec {
+    public CheckoutSessionJsonCodec() {
+    }
+
     private static JsonObject readObject(InputStream body) {
         try (JsonReader reader = Json.createReader(body)) {
             return reader.readObject();

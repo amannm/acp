@@ -17,7 +17,7 @@
 ## RFC §10 Conformance Checklist Status
 | Requirement | Status | Notes |
 | --- | --- | --- |
-| Enforce HTTPS + TLS 1.2+ | 🚧 | Server listens over plain HTTP only; CLI lacks TLS configuration. |
+| Enforce HTTPS + TLS 1.2+ | ✅ | Jetty requires TLS by default; HTTP now needs explicit `--allow-insecure-http`. |
 | Authoritative cart state on every response | ✅ | `CheckoutSessionServlet` reserializes full session after each mutation. |
 | Integer minor-unit amounts | ✅ | `MinorUnitAmount` record guards range and all totals derive from integers. |
 | Create/Update/Retrieve/Complete/Cancel endpoints | ✅ | All verbs implemented with appropriate status codes (201/200/404/409/405). |
@@ -40,3 +40,13 @@
 - Embedded Jetty server now accepts a `TlsConfiguration`, enabling HTTPS-only deployments by default while gating plain HTTP behind `--allow-insecure-http`.
 - `acp serve` exposes `--tls-keystore`, `--tls-keystore-password`, `--tls-key-password`, and updated `--port` semantics for HTTPS; running without TLS now requires an explicit opt-in flag.
 - Servlet integration tests execute against self-signed TLS endpoints using an ephemeral PKCS#12 keystore to exercise the secure listener end-to-end.
+
+## Additional Findings (Afternoon Review)
+- `OrderWebhookEvent` currently omits refund payloads, preventing compliance with webhook schema fields (`refunds[]`). `HttpOrderWebhookPublisher` therefore always emits an empty array.
+- No `order_update` publisher path exists; downstream systems never observe status transitions such as `canceled`, `manual_review`, or `fulfilled`.
+- `gradle test` passes under TLS-only configuration, but emits `missing-explicit-ctor` warnings for `CheckoutSessionJsonCodec` and `DelegatePaymentJsonCodec` that we should resolve (e.g., declare explicit public no-arg constructors).
+
+## Follow-up Resolved (Later 30 Oct 2025)
+- Webhook events now carry refund payloads and the checkout service emits an immediate `order_update` with `status=confirmed` after order creation so downstream systems can observe lifecycle progress.
+- New HTTP webhook publisher verification exercises serialized payloads and signature headers to guard regressions.
+- Codec classes declare explicit constructors to satisfy module export hygiene; `gradle test` runs clean without warnings.

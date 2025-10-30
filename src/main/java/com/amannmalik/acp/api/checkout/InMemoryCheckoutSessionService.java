@@ -386,6 +386,7 @@ public final class InMemoryCheckoutSessionService implements CheckoutSessionServ
                     CheckoutSessionStatus.COMPLETED,
                     order);
             publishOrderCreated(updated);
+            publishOrderUpdate(updated, OrderWebhookEvent.OrderStatus.CONFIRMED, List.of());
             return updated;
         });
     }
@@ -399,7 +400,23 @@ public final class InMemoryCheckoutSessionService implements CheckoutSessionServ
                 OrderWebhookEvent.Type.ORDER_CREATE,
                 session.id().value(),
                 webhookStatusFor(session.status()),
-                order.permalinkUrl());
+                order.permalinkUrl(),
+                List.of());
+        webhookPublisher.publish(event);
+    }
+
+    private void publishOrderUpdate(
+            CheckoutSession session, OrderWebhookEvent.OrderStatus status, List<OrderWebhookEvent.Refund> refunds) {
+        var order = session.order();
+        if (order == null) {
+            return;
+        }
+        var event = new OrderWebhookEvent(
+                OrderWebhookEvent.Type.ORDER_UPDATE,
+                session.id().value(),
+                status,
+                order.permalinkUrl(),
+                refunds == null ? List.of() : refunds);
         webhookPublisher.publish(event);
     }
 

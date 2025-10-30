@@ -4,6 +4,7 @@ import com.amannmalik.acp.spi.webhook.OrderWebhookEvent;
 import com.amannmalik.acp.spi.webhook.OrderWebhookPublisher;
 import com.amannmalik.acp.util.Ensure;
 import jakarta.json.Json;
+import jakarta.json.JsonArrayBuilder;
 
 import javax.crypto.Mac;
 import javax.crypto.spec.SecretKeySpec;
@@ -15,6 +16,7 @@ import java.security.GeneralSecurityException;
 import java.time.Clock;
 import java.time.Instant;
 import java.util.Base64;
+import java.util.List;
 
 public final class HttpOrderWebhookPublisher implements OrderWebhookPublisher {
     private static final Base64.Encoder SIGNATURE_ENCODER = Base64.getUrlEncoder().withoutPadding();
@@ -60,12 +62,22 @@ public final class HttpOrderWebhookPublisher implements OrderWebhookPublisher {
                 .add("checkout_session_id", event.checkoutSessionId())
                 .add("permalink_url", event.permalinkUrl().toString())
                 .add("status", event.status().jsonValue())
-                .add("refunds", Json.createArrayBuilder());
+                .add("refunds", writeRefunds(event.refunds()));
         return Json.createObjectBuilder()
                 .add("type", event.type().jsonValue())
                 .add("data", dataBuilder)
                 .build()
                 .toString();
+    }
+
+    private JsonArrayBuilder writeRefunds(List<OrderWebhookEvent.Refund> refunds) {
+        var builder = Json.createArrayBuilder();
+        for (var refund : refunds) {
+            builder.add(Json.createObjectBuilder()
+                    .add("type", refund.type().jsonValue())
+                    .add("amount", refund.amount().value()));
+        }
+        return builder;
     }
 
     private String sign(String payload, Instant timestamp) {

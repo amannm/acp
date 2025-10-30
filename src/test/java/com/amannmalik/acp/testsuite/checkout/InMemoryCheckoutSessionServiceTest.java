@@ -63,7 +63,7 @@ final class InMemoryCheckoutSessionServiceTest {
     }
 
     @Test
-    void completePublishesOrderCreateEvent() {
+    void completePublishesOrderLifecycleEvents() {
         var events = new ArrayList<OrderWebhookEvent>();
         var publisher = new RecordingPublisher(events);
         var service = new InMemoryCheckoutSessionService(
@@ -74,12 +74,20 @@ final class InMemoryCheckoutSessionServiceTest {
 
         service.complete(session.id(), completeRequest, "complete-1");
 
-        assertEquals(1, events.size());
-        var event = events.get(0);
-        assertEquals(OrderWebhookEvent.Type.ORDER_CREATE, event.type());
-        assertEquals(session.id().value(), event.checkoutSessionId());
-        assertEquals(OrderWebhookEvent.OrderStatus.CREATED, event.status());
-        assertTrue(event.permalinkUrl().toString().contains("/orders/"));
+        assertEquals(2, events.size());
+
+        var createEvent = events.get(0);
+        assertEquals(OrderWebhookEvent.Type.ORDER_CREATE, createEvent.type());
+        assertEquals(session.id().value(), createEvent.checkoutSessionId());
+        assertEquals(OrderWebhookEvent.OrderStatus.CREATED, createEvent.status());
+        assertTrue(createEvent.permalinkUrl().toString().contains("/orders/"));
+        assertTrue(createEvent.refunds().isEmpty());
+
+        var updateEvent = events.get(1);
+        assertEquals(OrderWebhookEvent.Type.ORDER_UPDATE, updateEvent.type());
+        assertEquals(OrderWebhookEvent.OrderStatus.CONFIRMED, updateEvent.status());
+        assertEquals(session.id().value(), updateEvent.checkoutSessionId());
+        assertTrue(updateEvent.refunds().isEmpty());
     }
 
     private record RecordingPublisher(List<OrderWebhookEvent> events) implements OrderWebhookPublisher {

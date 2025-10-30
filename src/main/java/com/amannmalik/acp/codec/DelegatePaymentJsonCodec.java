@@ -11,6 +11,9 @@ import java.util.*;
 
 /// See specification/2025-09-29/spec/openapi/openapi.delegate_payment.yaml
 public final class DelegatePaymentJsonCodec {
+    public DelegatePaymentJsonCodec() {
+    }
+
     private static JsonObject readObject(InputStream body) {
         try (JsonReader reader = Json.createReader(body)) {
             return reader.readObject();
