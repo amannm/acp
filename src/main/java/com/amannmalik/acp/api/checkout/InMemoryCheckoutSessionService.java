@@ -19,6 +19,8 @@ import com.amannmalik.acp.api.checkout.model.PaymentProvider;
 import com.amannmalik.acp.api.checkout.model.Total;
 import com.amannmalik.acp.api.shared.CurrencyCode;
 import com.amannmalik.acp.api.shared.MinorUnitAmount;
+import com.amannmalik.acp.server.webhook.OrderWebhookEvent;
+import com.amannmalik.acp.server.webhook.OrderWebhookPublisher;
 import java.math.BigDecimal;
 import java.math.RoundingMode;
 import java.net.URI;
@@ -29,6 +31,7 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
+import java.util.Locale;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ConcurrentMap;
 import java.util.concurrent.atomic.AtomicLong;
@@ -55,15 +58,26 @@ public final class InMemoryCheckoutSessionService implements CheckoutSessionServ
     private final Map<String, Long> priceBook;
     private final Clock clock;
     private final CurrencyCode currency;
+    private final OrderWebhookPublisher webhookPublisher;
 
     public InMemoryCheckoutSessionService(Map<String, Long> priceBook, Clock clock, CurrencyCode currency) {
+        this(priceBook, clock, currency, OrderWebhookPublisher.NOOP);
+    }
+
+    public InMemoryCheckoutSessionService(
+            Map<String, Long> priceBook, Clock clock, CurrencyCode currency, OrderWebhookPublisher webhookPublisher) {
         this.priceBook = Map.copyOf(priceBook);
         this.clock = Objects.requireNonNullElse(clock, Clock.systemUTC());
         this.currency = currency == null ? new CurrencyCode("usd") : currency;
+        this.webhookPublisher = webhookPublisher == null ? OrderWebhookPublisher.NOOP : webhookPublisher;
     }
 
     public InMemoryCheckoutSessionService() {
         this(defaultPriceBook(), Clock.systemUTC(), new CurrencyCode("usd"));
+    }
+
+    public InMemoryCheckoutSessionService(OrderWebhookPublisher webhookPublisher) {
+        this(defaultPriceBook(), Clock.systemUTC(), new CurrencyCode("usd"), webhookPublisher);
     }
 
     @Override
@@ -368,7 +382,7 @@ public final class InMemoryCheckoutSessionService implements CheckoutSessionServ
             var buyer = request.buyer() != null ? request.buyer() : current.buyer();
             var orderId = nextOrderId();
             var order = new Order(orderId, id, URI.create("https://merchant.example.com/orders/" + orderId));
-            return assemble(
+            var updated = assemble(
                     id,
                     buyer,
                     current.fulfillmentAddress(),
@@ -376,7 +390,22 @@ public final class InMemoryCheckoutSessionService implements CheckoutSessionServ
                     extractItems(current),
                     CheckoutSessionStatus.COMPLETED,
                     order);
+            publishOrderCreated(updated);
+            return updated;
         });
+    }
+
+    private void publishOrderCreated(CheckoutSession session) {
+        var order = session.order();
+        if (order == null) {
+            return;
+        }
+        var event = new OrderWebhookEvent(
+                OrderWebhookEvent.Type.ORDER_CREATE,
+                session.id().value(),
+                session.status().name().toLowerCase(Locale.ROOT),
+                order.permalinkUrl());
+        webhookPublisher.publish(event);
     }
 
     private static String normalizeIdempotencyKey(String key) {
