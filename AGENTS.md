@@ -31,6 +31,7 @@ description: ACP Specification Expert
 
 # Coding and architectural style
 - Ensure consistency between *specification*, *implementation*, *verification*.
+- You cannot modify the specification.
 - Make illegal states unrepresentable and valid operations obvious.
 - Keep external dependencies furthest from the center of a codebase.
 - Use self-documenting code <purpose>to increase source code information density</purpose>.
