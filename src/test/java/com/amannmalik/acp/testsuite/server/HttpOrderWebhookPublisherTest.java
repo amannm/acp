@@ -46,7 +46,8 @@ final class HttpOrderWebhookPublisherTest {
                 URI.create("https://example.com/webhook"),
                 "Merchant-Signature",
                 SECRET,
-                clock);
+                clock,
+                () -> "req-webhook-test");
 
         var event = new OrderWebhookEvent(
                 OrderWebhookEvent.Type.ORDER_UPDATE,
@@ -65,6 +66,8 @@ final class HttpOrderWebhookPublisherTest {
         assertFalse(signature.isBlank());
         var timestamp = client.recordedRequest.headers().firstValue("Timestamp").orElseThrow();
         assertEquals(clock.instant().toString(), timestamp);
+        var requestId = client.recordedRequest.headers().firstValue("Request-Id").orElseThrow();
+        assertEquals("req-webhook-test", requestId);
 
         var json = Json.createReader(new StringReader(client.recordedBody)).readObject();
         assertEquals("order_update", json.getString("type"));

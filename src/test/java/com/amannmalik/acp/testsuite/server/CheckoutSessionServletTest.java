@@ -313,6 +313,87 @@ final class CheckoutSessionServletTest {
         }
     }
 
+    @Test
+    void cancelSessionReturnsCanceledState() throws Exception {
+        try (var tls = TlsTestSupport.createTlsContext();
+                var server = newServer(tls.configuration())) {
+            server.start();
+            var client = HttpClient.newBuilder().sslContext(tls.sslContext()).build();
+            var baseUri = URI.create("https://localhost:" + server.httpsPort());
+            var create = sendCreateRequest(
+                    client,
+                    baseUri,
+                    """
+                    {"items":[{"id":"item_123","quantity":1}]}
+                    """,
+                    null,
+                    "req-cancel-create");
+            var sessionId = json(create.body()).getString("id");
+
+            var cancelResponse = client.send(
+                    HttpRequest.newBuilder(baseUri.resolve("/checkout_sessions/" + sessionId + "/cancel"))
+                            .header("Authorization", "Bearer test")
+                            .header("API-Version", ApiVersion.SUPPORTED)
+                            .header("Request-Id", "req-cancel-session")
+                            .POST(HttpRequest.BodyPublishers.noBody())
+                            .build(),
+                    HttpResponse.BodyHandlers.ofString());
+
+            assertEquals(200, cancelResponse.statusCode());
+            var json = json(cancelResponse.body());
+            assertEquals("canceled", json.getString("status"));
+            assertEquals(1, json.getJsonArray("messages").size());
+            assertEquals("info", json.getJsonArray("messages").getJsonObject(0).getString("type"));
+        }
+    }
+
+    @Test
+    void retrieveMissingSessionReturns404() throws Exception {
+        try (var tls = TlsTestSupport.createTlsContext();
+                var server = newServer(tls.configuration())) {
+            server.start();
+            var client = HttpClient.newBuilder().sslContext(tls.sslContext()).build();
+            var baseUri = URI.create("https://localhost:" + server.httpsPort());
+
+            var response = client.send(
+                    HttpRequest.newBuilder(baseUri.resolve("/checkout_sessions/csn_missing"))
+                            .header("Authorization", "Bearer test")
+                            .header("API-Version", ApiVersion.SUPPORTED)
+                            .GET()
+                            .build(),
+                    HttpResponse.BodyHandlers.ofString());
+
+            assertEquals(404, response.statusCode());
+            var errorJson = json(response.body());
+            assertEquals("invalid_request", errorJson.getString("type"));
+            assertEquals("not_found", errorJson.getString("code"));
+        }
+    }
+
+    @Test
+    void missingAuthorizationReturns401() throws Exception {
+        try (var tls = TlsTestSupport.createTlsContext();
+                var server = newServer(tls.configuration())) {
+            server.start();
+            var client = HttpClient.newBuilder().sslContext(tls.sslContext()).build();
+            var baseUri = URI.create("https://localhost:" + server.httpsPort());
+
+            var request = HttpRequest.newBuilder(baseUri.resolve("/checkout_sessions"))
+                    .header("API-Version", ApiVersion.SUPPORTED)
+                    .header("Content-Type", "application/json")
+                    .POST(HttpRequest.BodyPublishers.ofString("""
+                            {"items":[{"id":"item_123","quantity":1}]}
+                            """))
+                    .build();
+            var response = client.send(request, HttpResponse.BodyHandlers.ofString());
+
+            assertEquals(401, response.statusCode());
+            var errorJson = json(response.body());
+            assertEquals("invalid_request", errorJson.getString("type"));
+            assertEquals("unauthorized", errorJson.getString("code"));
+        }
+    }
+
     private static JettyHttpServer newServer(TlsConfiguration tlsConfiguration) {
         var checkout = new InMemoryCheckoutSessionService();
         var delegate = new InMemoryDelegatePaymentService();

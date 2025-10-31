@@ -115,6 +115,28 @@ final class DelegatePaymentServletTest {
         }
     }
 
+    @Test
+    void missingAuthorizationReturns401() throws Exception {
+        try (var tls = TlsTestSupport.createTlsContext();
+                var server = newServer(tls.configuration())) {
+            server.start();
+            var client = HttpClient.newBuilder().sslContext(tls.sslContext()).build();
+            var request = HttpRequest.newBuilder(serverBaseUri(server).resolve("/agentic_commerce/delegate_payment"))
+                    .header("API-Version", ApiVersion.SUPPORTED)
+                    .header("Content-Type", "application/json")
+                    .header("Request-Id", "req-missing-auth")
+                    .POST(HttpRequest.BodyPublishers.ofString(VALID_REQUEST_BODY))
+                    .build();
+
+            var response = client.send(request, HttpResponse.BodyHandlers.ofString());
+
+            assertEquals(401, response.statusCode());
+            var errorJson = Json.createReader(new StringReader(response.body())).readObject();
+            assertEquals("invalid_request", errorJson.getString("type"));
+            assertEquals("unauthorized", errorJson.getString("code"));
+        }
+    }
+
     private static URI serverBaseUri(JettyHttpServer server) {
         return URI.create("https://localhost:" + server.httpsPort());
     }

@@ -17,6 +17,9 @@ import java.time.Clock;
 import java.time.Instant;
 import java.util.Base64;
 import java.util.List;
+import java.util.Objects;
+import java.util.UUID;
+import java.util.function.Supplier;
 
 public final class HttpOrderWebhookPublisher implements OrderWebhookPublisher {
     private static final Base64.Encoder SIGNATURE_ENCODER = Base64.getUrlEncoder().withoutPadding();
@@ -26,13 +29,26 @@ public final class HttpOrderWebhookPublisher implements OrderWebhookPublisher {
     private final String signatureHeader;
     private final byte[] secret;
     private final Clock clock;
+    private final Supplier<String> requestIdSupplier;
 
     public HttpOrderWebhookPublisher(HttpClient httpClient, URI endpoint, String signatureHeader, byte[] secret, Clock clock) {
+        this(httpClient, endpoint, signatureHeader, secret, clock, HttpOrderWebhookPublisher::defaultRequestId);
+    }
+
+    public HttpOrderWebhookPublisher(
+            HttpClient httpClient,
+            URI endpoint,
+            String signatureHeader,
+            byte[] secret,
+            Clock clock,
+            Supplier<String> requestIdSupplier) {
         this.httpClient = Ensure.notNull("webhook.http_client", httpClient);
         this.endpoint = Ensure.notNull("webhook.endpoint", endpoint);
         this.signatureHeader = Ensure.nonBlank("webhook.signature_header", signatureHeader);
         this.secret = secret.clone();
         this.clock = clock == null ? Clock.systemUTC() : clock;
+        this.requestIdSupplier =
+                Objects.requireNonNullElse(requestIdSupplier, HttpOrderWebhookPublisher::defaultRequestId);
     }
 
     @Override
@@ -40,9 +56,11 @@ public final class HttpOrderWebhookPublisher implements OrderWebhookPublisher {
         var payload = serialize(event);
         var timestamp = clock.instant();
         var signature = sign(payload, timestamp);
+        var requestId = requestIdSupplier.get();
         var request = HttpRequest.newBuilder(endpoint)
                 .header("Content-Type", "application/json")
                 .header(signatureHeader, signature)
+                .header("Request-Id", requestId)
                 .header("Timestamp", timestamp.toString())
                 .POST(HttpRequest.BodyPublishers.ofString(payload))
                 .build();
@@ -95,5 +113,9 @@ public final class HttpOrderWebhookPublisher implements OrderWebhookPublisher {
         } catch (GeneralSecurityException e) {
             throw new IllegalStateException("Failed to initialize webhook signature", e);
         }
+    }
+
+    private static String defaultRequestId() {
+        return "req_" + UUID.randomUUID();
     }
 }
