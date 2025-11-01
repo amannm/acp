@@ -11,7 +11,7 @@ final class AddressJson {
         return new Address(
                 JsonSupport.requireString(object, "name"),
                 JsonSupport.requireString(object, "line_one"),
-                JsonSupport.optionalString(object, "line_two"),
+                JsonSupport.optionalStringAllowBlank(object, "line_two"),
                 JsonSupport.requireString(object, "city"),
                 JsonSupport.requireString(object, "state"),
                 JsonSupport.requireString(object, "country"),

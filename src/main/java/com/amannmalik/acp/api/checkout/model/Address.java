@@ -17,8 +17,5 @@ public record Address(
         state = Ensure.nonBlank("address.state", state);
         country = Ensure.nonBlank("address.country", country);
         postalCode = Ensure.nonBlank("address.postal_code", postalCode);
-        if (lineTwo != null && lineTwo.isBlank()) {
-            throw new IllegalArgumentException("address.line_two MUST be non-blank when provided");
-        }
     }
 }

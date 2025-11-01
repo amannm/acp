@@ -59,6 +59,17 @@ final class JsonSupport {
         return string;
     }
 
+    static String optionalStringAllowBlank(JsonObject parent, String key) {
+        if (!parent.containsKey(key) || parent.isNull(key)) {
+            return null;
+        }
+        var value = parent.get(key);
+        if (value.getValueType() != JsonValue.ValueType.STRING) {
+            throw new JsonDecodingException("Expected string at: " + key);
+        }
+        return ((JsonString) value).getString();
+    }
+
     static int requireInt(JsonObject parent, String key) {
         if (!parent.containsKey(key) || parent.isNull(key)) {
             throw new JsonDecodingException("Missing integer: " + key);
