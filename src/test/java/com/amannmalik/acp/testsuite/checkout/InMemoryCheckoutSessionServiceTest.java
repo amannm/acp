@@ -41,7 +41,7 @@ final class InMemoryCheckoutSessionServiceTest {
 
         var session = service.create(request, null);
 
-        assertEquals(CheckoutSessionStatus.READY_FOR_PAYMENT, session.status());
+        assertEquals(CheckoutSessionStatus.NOT_READY_FOR_PAYMENT, session.status());
         assertEquals("usd", session.currency().value());
         assertEquals(1, session.lineItems().size());
         var lineItem = session.lineItems().get(0);
@@ -50,6 +50,9 @@ final class InMemoryCheckoutSessionServiceTest {
         assertEquals(0L, lineItem.discount().value());
         assertNotNull(session.fulfillmentOptionId());
         assertEquals(6, session.totals().size());
+        assertEquals(1, session.messages().size());
+        assertTrue(session.messages().get(0) instanceof com.amannmalik.acp.api.checkout.model.Message.Info info
+                && "$.fulfillment_address".equals(info.param()));
     }
 
     @Test
@@ -72,6 +75,17 @@ final class InMemoryCheckoutSessionServiceTest {
                 Map.of("item_test", 1200L), FIXED_CLOCK, new CurrencyCode("usd"), publisher);
 
         var session = service.create(new CheckoutSessionCreateRequest(List.of(new Item("item_test", 1)), null, null), null);
+        var address = new com.amannmalik.acp.api.checkout.model.Address(
+                "Test Buyer",
+                "123 Test Street",
+                "Apt 1",
+                "Test City",
+                "CA",
+                "US",
+                "94016");
+        service.update(
+                session.id(),
+                new CheckoutSessionUpdateRequest(null, null, address, session.fulfillmentOptionId()));
         var completeRequest = new CheckoutSessionCompleteRequest(null, new PaymentData("tok", PaymentProvider.Provider.STRIPE, null));
 
         service.complete(session.id(), completeRequest, "complete-1");

@@ -18,14 +18,6 @@ public final class JettyHttpServer implements AutoCloseable {
     private final ServerConnector httpsConnector;
 
     public JettyHttpServer(
-            int port,
-            CheckoutSessionService checkoutSessionService,
-            DelegatePaymentService delegatePaymentService,
-            RequestAuthenticator requestAuthenticator) {
-        this(Configuration.httpOnly(port), checkoutSessionService, delegatePaymentService, requestAuthenticator);
-    }
-
-    public JettyHttpServer(
             Configuration configuration,
             CheckoutSessionService checkoutSessionService,
             DelegatePaymentService delegatePaymentService,

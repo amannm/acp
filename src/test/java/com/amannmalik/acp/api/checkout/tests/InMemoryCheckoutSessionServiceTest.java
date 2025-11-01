@@ -83,6 +83,21 @@ final class InMemoryCheckoutSessionServiceTest {
                 () -> service.complete(session.id(), differentPayment, "idem_complete"));
     }
 
+    @Test
+    void createWithoutFulfillmentAddressIsNotReady() {
+        var request = new CheckoutSessionCreateRequest(
+                List.of(new Item("item_123", 1)),
+                new Buyer("Jane", "Doe", "jane@example.com", null),
+                null);
+
+        var session = service.create(request, null);
+
+        assertEquals(CheckoutSessionStatus.NOT_READY_FOR_PAYMENT, session.status());
+        assertFalse(session.messages().isEmpty());
+        assertTrue(session.messages().get(0) instanceof Message.Info info
+                && "$.fulfillment_address".equals(info.param()));
+    }
+
     private CheckoutSessionCreateRequest createRequest() {
         return new CheckoutSessionCreateRequest(
                 List.of(new Item("item_123", 1)),

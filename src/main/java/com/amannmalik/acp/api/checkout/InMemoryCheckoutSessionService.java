@@ -130,7 +130,7 @@ public final class InMemoryCheckoutSessionService implements CheckoutSessionServ
             var fulfillmentOptionId = request.fulfillmentOptionId() != null
                     ? request.fulfillmentOptionId()
                     : current.fulfillmentOptionId();
-            return assemble(id, buyer, fulfillmentAddress, fulfillmentOptionId, items, current.status(), current.order());
+            return assemble(id, buyer, fulfillmentAddress, fulfillmentOptionId, items, StatusOverride.AUTO, current.order());
         });
     }
 
@@ -188,7 +188,7 @@ public final class InMemoryCheckoutSessionService implements CheckoutSessionServ
                     current.fulfillmentAddress(),
                     current.fulfillmentOptionId(),
                     extractItems(current),
-                    CheckoutSessionStatus.CANCELED,
+                    StatusOverride.CANCELED,
                     null);
         });
     }
@@ -199,14 +199,22 @@ public final class InMemoryCheckoutSessionService implements CheckoutSessionServ
             Address fulfillmentAddress,
             FulfillmentOptionId requestedFulfillmentOptionId,
             List<Item> items,
-            CheckoutSessionStatus status,
+            StatusOverride override,
             Order order) {
         var normalizedItems = List.copyOf(items);
         var lineItems = priceItems(normalizedItems);
         var fulfillmentOptions = buildFulfillmentOptions();
         var fulfillmentOptionId = resolveFulfillmentOptionId(fulfillmentOptions, requestedFulfillmentOptionId);
         var totals = computeTotals(lineItems, fulfillmentOptions, fulfillmentOptionId);
-        var messages = messagesForStatus(status);
+        var readiness = evaluateReadiness(fulfillmentAddress, fulfillmentOptionId, fulfillmentOptions);
+        var status = switch (override) {
+            case COMPLETED -> CheckoutSessionStatus.COMPLETED;
+            case CANCELED -> CheckoutSessionStatus.CANCELED;
+            case AUTO -> readiness.ready()
+                    ? CheckoutSessionStatus.READY_FOR_PAYMENT
+                    : CheckoutSessionStatus.NOT_READY_FOR_PAYMENT;
+        };
+        var messages = messagesForStatus(status, readiness);
         return new CheckoutSession(
                 id,
                 buyer,
@@ -321,9 +329,38 @@ public final class InMemoryCheckoutSessionService implements CheckoutSessionServ
                 .orElse(0L);
     }
 
-    private List<Message> messagesForStatus(CheckoutSessionStatus status) {
+    private Readiness evaluateReadiness(
+            Address fulfillmentAddress,
+            FulfillmentOptionId fulfillmentOptionId,
+            List<FulfillmentOption> fulfillmentOptions) {
+        var requirements = new ArrayList<MissingRequirement>();
+        if (fulfillmentOptionId == null) {
+            requirements.add(new MissingRequirement(
+                    "$.fulfillment_option_id",
+                    "Select a fulfillment option before completing checkout."));
+        }
+        var requiresAddress = fulfillmentOptions.stream().anyMatch(option -> option instanceof FulfillmentOption.Shipping);
+        if (requiresAddress && fulfillmentAddress == null) {
+            requirements.add(new MissingRequirement(
+                    "$.fulfillment_address",
+                    "Provide fulfillment_address for shipping fulfillment."));
+        }
+        return new Readiness(requirements.isEmpty(), List.copyOf(requirements));
+    }
+
+    private List<Message> messagesForStatus(CheckoutSessionStatus status, Readiness readiness) {
         if (status == CheckoutSessionStatus.CANCELED) {
             return List.of(new Message.Info(null, Message.ContentType.PLAIN, "Checkout session has been canceled."));
+        }
+        if (status == CheckoutSessionStatus.NOT_READY_FOR_PAYMENT) {
+            var infos = new ArrayList<Message>(readiness.missing().size());
+            for (var requirement : readiness.missing()) {
+                infos.add(new Message.Info(
+                        requirement.param(),
+                        Message.ContentType.PLAIN,
+                        requirement.message()));
+            }
+            return List.copyOf(infos);
         }
         return List.of();
     }
@@ -354,7 +391,7 @@ public final class InMemoryCheckoutSessionService implements CheckoutSessionServ
                 request.fulfillmentAddress(),
                 null,
                 request.items(),
-                CheckoutSessionStatus.READY_FOR_PAYMENT,
+                StatusOverride.AUTO,
                 null);
         sessions.put(id.value(), session);
         return session;
@@ -374,6 +411,21 @@ public final class InMemoryCheckoutSessionService implements CheckoutSessionServ
             if (request.paymentData().provider() != PAYMENT_PROVIDER.provider()) {
                 throw new CheckoutSessionConflictException("Unsupported payment provider: " + request.paymentData().provider());
             }
+            var readiness = evaluateReadiness(
+                    current.fulfillmentAddress(),
+                    current.fulfillmentOptionId(),
+                    current.fulfillmentOptions());
+            if (!readiness.ready()) {
+                var message = readiness.missing().isEmpty()
+                        ? "Checkout session is not ready for payment"
+                        : readiness.missing().stream()
+                                .map(MissingRequirement::message)
+                                .collect(Collectors.joining("; "));
+                var param = readiness.missing().isEmpty()
+                        ? "$.status"
+                        : readiness.missing().get(0).param();
+                throw new CheckoutSessionValidationException(message, "session_not_ready", param);
+            }
             var buyer = request.buyer() != null ? request.buyer() : current.buyer();
             var orderId = nextOrderId();
             var order = new Order(orderId, id, URI.create("https://merchant.example.com/orders/" + orderId));
@@ -383,7 +435,7 @@ public final class InMemoryCheckoutSessionService implements CheckoutSessionServ
                     current.fulfillmentAddress(),
                     current.fulfillmentOptionId(),
                     extractItems(current),
-                    CheckoutSessionStatus.COMPLETED,
+                    StatusOverride.COMPLETED,
                     order);
             publishOrderCreated(updated);
             publishOrderUpdate(updated, OrderWebhookEvent.OrderStatus.CONFIRMED, List.of());
@@ -418,6 +470,29 @@ public final class InMemoryCheckoutSessionService implements CheckoutSessionServ
                 order.permalinkUrl(),
                 refunds == null ? List.of() : refunds);
         webhookPublisher.publish(event);
+    }
+
+    private enum StatusOverride {
+        AUTO,
+        COMPLETED,
+        CANCELED
+    }
+
+    private record MissingRequirement(String param, String message) {
+        MissingRequirement {
+            if (param != null && param.isBlank()) {
+                throw new IllegalArgumentException("missing requirement param MUST be non-blank when provided");
+            }
+            if (message == null || message.isBlank()) {
+                throw new IllegalArgumentException("missing requirement message MUST be non-blank");
+            }
+        }
+    }
+
+    private record Readiness(boolean ready, List<MissingRequirement> missing) {
+        Readiness {
+            missing = List.copyOf(missing);
+        }
     }
 
     private record StoredCreateRequest(CheckoutSessionCreateRequest request, CheckoutSession snapshot) {

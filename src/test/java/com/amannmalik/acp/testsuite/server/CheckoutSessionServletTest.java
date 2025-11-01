@@ -126,6 +126,15 @@ final class CheckoutSessionServletTest {
                     "req-complete-1");
             var sessionId = json(create.body()).getString("id");
 
+            var readyResponse = sendUpdateRequest(
+                    client,
+                    baseUri,
+                    sessionId,
+                    shippingAddressUpdate(),
+                    "req-ready-1");
+            assertEquals(200, readyResponse.statusCode());
+            assertEquals("ready_for_payment", json(readyResponse.body()).getString("status"));
+
             var completeBody = """
                     {
                       "payment_data": {
@@ -165,6 +174,14 @@ final class CheckoutSessionServletTest {
                     "req-complete-4");
             var sessionId = json(create.body()).getString("id");
 
+            var readyResponse = sendUpdateRequest(
+                    client,
+                    baseUri,
+                    sessionId,
+                    shippingAddressUpdate(),
+                    "req-ready-2");
+            assertEquals(200, readyResponse.statusCode());
+
             var body = """
                     {
                       "payment_data": {
@@ -190,6 +207,49 @@ final class CheckoutSessionServletTest {
             var errorJson = json(second.body());
             assertEquals("request_not_idempotent", errorJson.getString("type"));
             assertEquals("idempotency_conflict", errorJson.getString("code"));
+        }
+    }
+
+    @Test
+    void completeWhenSessionNotReadyReturns409() throws Exception {
+        try (var tls = TlsTestSupport.createTlsContext();
+                var server = newServer(tls.configuration())) {
+            server.start();
+            var client = HttpClient.newBuilder().sslContext(tls.sslContext()).build();
+            var baseUri = URI.create("https://localhost:" + server.httpsPort());
+            var create = sendCreateRequest(
+                    client,
+                    baseUri,
+                    """
+                    {"items":[{"id":"item_123","quantity":1}]}
+                    """,
+                    "idem-not-ready",
+                    "req-not-ready-create");
+            var createdJson = json(create.body());
+            assertEquals("not_ready_for_payment", createdJson.getString("status"));
+            var sessionId = createdJson.getString("id");
+
+            var completeBody = """
+                    {
+                      "payment_data": {
+                        "token": "tok_not_ready",
+                        "provider": "stripe"
+                      }
+                    }
+                    """;
+            var response = sendCompleteRequest(
+                    client,
+                    baseUri,
+                    sessionId,
+                    completeBody,
+                    "idem-not-ready",
+                    "req-not-ready-complete");
+
+            assertEquals(409, response.statusCode());
+            var errorJson = json(response.body());
+            assertEquals("invalid_request", errorJson.getString("type"));
+            assertEquals("session_not_ready", errorJson.getString("code"));
+            assertEquals("$.fulfillment_address", errorJson.getString("param"));
         }
     }
 
@@ -453,6 +513,22 @@ final class CheckoutSessionServletTest {
                 .header("Request-Id", requestId)
                 .POST(HttpRequest.BodyPublishers.ofString(body));
         return client.send(builder.build(), HttpResponse.BodyHandlers.ofString());
+    }
+
+    private static String shippingAddressUpdate() {
+        return """
+                {
+                  "fulfillment_address": {
+                    "name": "John Doe",
+                    "line_one": "1234 Chat Road",
+                    "line_two": "",
+                    "city": "San Francisco",
+                    "state": "CA",
+                    "country": "US",
+                    "postal_code": "94131"
+                  }
+                }
+                """;
     }
 
     private static JsonObject json(String body) {
