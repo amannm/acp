@@ -72,6 +72,31 @@ final class ConfigurableRequestAuthenticatorTest {
         assertEquals(ErrorResponse.ErrorType.INVALID_REQUEST, problem.errorType());
     }
 
+    @Test
+    @DisplayName("authenticate accepts canonicalized JSON bodies")
+    void authenticateCanonicalizedPayload() {
+        var configuration = new SecurityConfiguration(Set.of("token"), Map.of("key1", SECRET), java.time.Duration.ofMinutes(5));
+        var authenticator = new ConfigurableRequestAuthenticator(configuration, Clock.systemUTC());
+        var timestamp = Instant.now().toString();
+        var body = """
+                {
+                  "b": 2,
+                  "items": [
+                    { "sku": "123", "quantity": 1 }
+                  ],
+                  "a": { "last": "Smith", "first": "John" }
+                }
+                """.getBytes(StandardCharsets.UTF_8);
+        var canonical = "{\"a\":{\"first\":\"John\",\"last\":\"Smith\"},\"b\":2,\"items\":[{\"quantity\":1,\"sku\":\"123\"}]}";
+        var signature = signCanonical(timestamp, canonical);
+        var request = request(Map.of(
+                "Authorization", "Bearer token",
+                "Timestamp", timestamp,
+                "Signature", "key1:" + signature));
+
+        authenticator.authenticate(request, body);
+    }
+
     private static HttpServletRequest request(Map<String, String> headers) {
         return (HttpServletRequest) Proxy.newProxyInstance(
                 HttpServletRequest.class.getClassLoader(),
@@ -91,6 +116,17 @@ final class ConfigurableRequestAuthenticatorTest {
             mac.init(new SecretKeySpec(SECRET, "HmacSHA256"));
             var canonical = timestamp + "." + new String(body, StandardCharsets.UTF_8);
             var digest = mac.doFinal(canonical.getBytes(StandardCharsets.UTF_8));
+            return Base64.getUrlEncoder().withoutPadding().encodeToString(digest);
+        } catch (GeneralSecurityException e) {
+            throw new IllegalStateException(e);
+        }
+    }
+
+    private static String signCanonical(String timestamp, String canonicalJson) {
+        try {
+            var mac = Mac.getInstance("HmacSHA256");
+            mac.init(new SecretKeySpec(SECRET, "HmacSHA256"));
+            var digest = mac.doFinal((timestamp + "." + canonicalJson).getBytes(StandardCharsets.UTF_8));
             return Base64.getUrlEncoder().withoutPadding().encodeToString(digest);
         } catch (GeneralSecurityException e) {
             throw new IllegalStateException(e);

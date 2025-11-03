@@ -137,6 +137,28 @@ final class DelegatePaymentServletTest {
         }
     }
 
+    @Test
+    void merchantIdLongerThan256Returns400() throws Exception {
+        try (var tls = TlsTestSupport.createTlsContext();
+                var server = newServer(tls.configuration())) {
+            server.start();
+            var client = HttpClient.newBuilder().sslContext(tls.sslContext()).build();
+            var longMerchant = "m".repeat(257);
+            var body = VALID_REQUEST_BODY.replace("\"merchant_id\": \"acme\"", "\"merchant_id\": \"" + longMerchant + "\"");
+
+            var response = sendDelegatePaymentRequest(
+                    client,
+                    serverBaseUri(server),
+                    "idem-long-merchant",
+                    body);
+
+            assertEquals(400, response.statusCode());
+            var errorJson = Json.createReader(new StringReader(response.body())).readObject();
+            assertEquals("invalid_request", errorJson.getString("type"));
+            assertEquals("invalid_request", errorJson.getString("code"));
+        }
+    }
+
     private static URI serverBaseUri(JettyHttpServer server) {
         return URI.create("https://localhost:" + server.httpsPort());
     }

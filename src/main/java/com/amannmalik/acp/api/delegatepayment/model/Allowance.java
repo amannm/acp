@@ -19,7 +19,14 @@ public record Allowance(
         currency = Ensure.notNull("allowance.currency", currency);
         checkoutSessionId = Ensure.nonBlank("allowance.checkout_session_id", checkoutSessionId);
         merchantId = Ensure.nonBlank("allowance.merchant_id", merchantId);
+        ensureMerchantLength(merchantId);
         expiresAt = Ensure.notNull("allowance.expires_at", expiresAt);
+    }
+
+    private static void ensureMerchantLength(String merchantId) {
+        if (merchantId.length() > 256) {
+            throw new IllegalArgumentException("allowance.merchant_id MUST be <= 256 characters");
+        }
     }
 
     public enum Reason {

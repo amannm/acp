@@ -374,6 +374,49 @@ final class CheckoutSessionServletTest {
     }
 
     @Test
+    void updateWithOverlyLongAddressReturns400() throws Exception {
+        try (var tls = TlsTestSupport.createTlsContext();
+                var server = newServer(tls.configuration())) {
+            server.start();
+            var client = HttpClient.newBuilder().sslContext(tls.sslContext()).build();
+            var baseUri = URI.create("https://localhost:" + server.httpsPort());
+            var create = sendCreateRequest(
+                    client,
+                    baseUri,
+                    """
+                    {"items":[{"id":"item_123","quantity":1}]}
+                    """,
+                    null,
+                    "req-update-too-long");
+            var sessionId = json(create.body()).getString("id");
+
+            var longName = "N".repeat(257);
+            var response = sendUpdateRequest(
+                    client,
+                    baseUri,
+                    sessionId,
+                    """
+                    {
+                      "fulfillment_address": {
+                        "name": "%s",
+                        "line_one": "123 Main St",
+                        "city": "San Francisco",
+                        "state": "CA",
+                        "country": "US",
+                        "postal_code": "94102"
+                      }
+                    }
+                    """.formatted(longName),
+                    "req-update-invalid-address");
+
+            assertEquals(400, response.statusCode());
+            var errorJson = json(response.body());
+            assertEquals("invalid_request", errorJson.getString("type"));
+            assertEquals("invalid_request", errorJson.getString("code"));
+        }
+    }
+
+    @Test
     void cancelSessionReturnsCanceledState() throws Exception {
         try (var tls = TlsTestSupport.createTlsContext();
                 var server = newServer(tls.configuration())) {
