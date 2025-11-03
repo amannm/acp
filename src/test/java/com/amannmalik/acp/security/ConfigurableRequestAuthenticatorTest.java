@@ -8,6 +8,10 @@ import jakarta.servlet.http.HttpServletRequest;
 import java.lang.reflect.Proxy;
 import java.nio.charset.StandardCharsets;
 import java.security.GeneralSecurityException;
+import java.security.KeyPair;
+import java.security.KeyPairGenerator;
+import java.security.PrivateKey;
+import java.security.Signature;
 import java.time.Clock;
 import java.time.Instant;
 import java.util.Base64;
@@ -27,7 +31,10 @@ final class ConfigurableRequestAuthenticatorTest {
     @Test
     @DisplayName("authenticate accepts valid bearer + signature")
     void authenticateValidRequest() {
-        var configuration = new SecurityConfiguration(Set.of("token"), Map.of("key1", SECRET), java.time.Duration.ofMinutes(5));
+        var configuration = new SecurityConfiguration(
+                Set.of("token"),
+                Map.of("key1", new SecurityConfiguration.SigningKey.HmacSha256(SECRET)),
+                java.time.Duration.ofMinutes(5));
         var authenticator = new ConfigurableRequestAuthenticator(configuration, Clock.fixed(Instant.parse("2025-10-30T12:00:00Z"), java.time.ZoneOffset.UTC));
         var timestamp = "2025-10-30T12:00:00Z";
         var body = "{\"items\":[]}".getBytes(StandardCharsets.UTF_8);
@@ -43,7 +50,10 @@ final class ConfigurableRequestAuthenticatorTest {
     @Test
     @DisplayName("authenticate rejects missing timestamp when signature required")
     void authenticateMissingTimestamp() {
-        var configuration = new SecurityConfiguration(Set.of("token"), Map.of("key1", SECRET), java.time.Duration.ofMinutes(5));
+        var configuration = new SecurityConfiguration(
+                Set.of("token"),
+                Map.of("key1", new SecurityConfiguration.SigningKey.HmacSha256(SECRET)),
+                java.time.Duration.ofMinutes(5));
         var authenticator = new ConfigurableRequestAuthenticator(configuration, Clock.systemUTC());
         var body = "{\"items\":[]}".getBytes(StandardCharsets.UTF_8);
         var request = request(Map.of(
@@ -58,7 +68,10 @@ final class ConfigurableRequestAuthenticatorTest {
     @Test
     @DisplayName("authenticate rejects invalid signature")
     void authenticateInvalidSignature() {
-        var configuration = new SecurityConfiguration(Set.of("token"), Map.of("key1", SECRET), java.time.Duration.ofMinutes(5));
+        var configuration = new SecurityConfiguration(
+                Set.of("token"),
+                Map.of("key1", new SecurityConfiguration.SigningKey.HmacSha256(SECRET)),
+                java.time.Duration.ofMinutes(5));
         var authenticator = new ConfigurableRequestAuthenticator(configuration, Clock.systemUTC());
         var timestamp = Instant.now().toString();
         var body = "{\"items\":[]}".getBytes(StandardCharsets.UTF_8);
@@ -75,7 +88,10 @@ final class ConfigurableRequestAuthenticatorTest {
     @Test
     @DisplayName("authenticate accepts canonicalized JSON bodies")
     void authenticateCanonicalizedPayload() {
-        var configuration = new SecurityConfiguration(Set.of("token"), Map.of("key1", SECRET), java.time.Duration.ofMinutes(5));
+        var configuration = new SecurityConfiguration(
+                Set.of("token"),
+                Map.of("key1", new SecurityConfiguration.SigningKey.HmacSha256(SECRET)),
+                java.time.Duration.ofMinutes(5));
         var authenticator = new ConfigurableRequestAuthenticator(configuration, Clock.systemUTC());
         var timestamp = Instant.now().toString();
         var body = """
@@ -95,6 +111,50 @@ final class ConfigurableRequestAuthenticatorTest {
                 "Signature", "key1:" + signature));
 
         authenticator.authenticate(request, body);
+    }
+
+    @Test
+    @DisplayName("authenticate accepts valid Ed25519 signature")
+    void authenticateValidEd25519Signature() throws Exception {
+        var keyPair = ed25519KeyPair();
+        var configuration = new SecurityConfiguration(
+                Set.of("token"),
+                Map.of("ed", new SecurityConfiguration.SigningKey.Ed25519(keyPair.getPublic())),
+                java.time.Duration.ofMinutes(5));
+        var clock = Clock.fixed(Instant.parse("2025-10-30T12:00:00Z"), java.time.ZoneOffset.UTC);
+        var authenticator = new ConfigurableRequestAuthenticator(configuration, clock);
+        var timestamp = clock.instant().toString();
+        var body = "{\"items\":[]}".getBytes(StandardCharsets.UTF_8);
+        var signature = signEd25519(timestamp, body, keyPair.getPrivate());
+        var request = request(Map.of(
+                "Authorization", "Bearer token",
+                "Timestamp", timestamp,
+                "Signature", "ed:" + signature));
+
+        authenticator.authenticate(request, body);
+    }
+
+    @Test
+    @DisplayName("authenticate rejects invalid Ed25519 signature")
+    void authenticateInvalidEd25519Signature() throws Exception {
+        var keyPair = ed25519KeyPair();
+        var configuration = new SecurityConfiguration(
+                Set.of("token"),
+                Map.of("ed", new SecurityConfiguration.SigningKey.Ed25519(keyPair.getPublic())),
+                java.time.Duration.ofMinutes(5));
+        var authenticator = new ConfigurableRequestAuthenticator(configuration, Clock.systemUTC());
+        var timestamp = Instant.now().toString();
+        var body = "{\"items\":[]}".getBytes(StandardCharsets.UTF_8);
+        var signature = signEd25519(timestamp, body, keyPair.getPrivate());
+        var tampered = signature.substring(0, signature.length() - 2) + "AA";
+        var request = request(Map.of(
+                "Authorization", "Bearer token",
+                "Timestamp", timestamp,
+                "Signature", "ed:" + tampered));
+
+        var problem = assertThrows(HttpProblem.class, () -> authenticator.authenticate(request, body));
+        assertEquals("invalid_signature", problem.code());
+        assertEquals(ErrorResponse.ErrorType.INVALID_REQUEST, problem.errorType());
     }
 
     private static HttpServletRequest request(Map<String, String> headers) {
@@ -131,6 +191,19 @@ final class ConfigurableRequestAuthenticatorTest {
         } catch (GeneralSecurityException e) {
             throw new IllegalStateException(e);
         }
+    }
+
+    private static String signEd25519(String timestamp, byte[] body, PrivateKey privateKey) throws GeneralSecurityException {
+        var payload = (timestamp + "." + new String(body, StandardCharsets.UTF_8)).getBytes(StandardCharsets.UTF_8);
+        var signature = Signature.getInstance("Ed25519");
+        signature.initSign(privateKey);
+        signature.update(payload);
+        return Base64.getUrlEncoder().withoutPadding().encodeToString(signature.sign());
+    }
+
+    private static KeyPair ed25519KeyPair() throws GeneralSecurityException {
+        var generator = KeyPairGenerator.getInstance("Ed25519");
+        return generator.generateKeyPair();
     }
 
     private static byte[] decode(String value) {

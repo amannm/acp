@@ -9,6 +9,7 @@ import javax.crypto.spec.SecretKeySpec;
 import java.nio.charset.StandardCharsets;
 import java.security.GeneralSecurityException;
 import java.security.MessageDigest;
+import java.security.Signature;
 import java.time.*;
 import java.util.Base64;
 import java.util.Locale;
@@ -96,8 +97,8 @@ public final class ConfigurableRequestAuthenticator implements RequestAuthentica
         }
         var keyId = signatureParts[0].trim();
         var encodedSignature = signatureParts[1].trim();
-        var secret = configuration.hmacSecrets().get(keyId);
-        if (secret == null) {
+        var signingKey = configuration.signingKeys().get(keyId);
+        if (signingKey == null) {
             throw new HttpProblem(
                     400,
                     ErrorResponse.ErrorType.INVALID_REQUEST,
@@ -107,14 +108,22 @@ public final class ConfigurableRequestAuthenticator implements RequestAuthentica
         var canonicalJson = CanonicalJson.canonicalize(body);
         var payload = (timestampHeader + "." + canonicalJson).getBytes(StandardCharsets.UTF_8);
         var providedSignature = decodeSignature(encodedSignature);
-        var expectedSignature = hmacSha256(secret, payload);
-        if (!MessageDigest.isEqual(expectedSignature, providedSignature)) {
+        if (!verifySignature(signingKey, payload, providedSignature)) {
             throw new HttpProblem(
                     401,
                     ErrorResponse.ErrorType.INVALID_REQUEST,
                     "invalid_signature",
                     "Signature verification failed");
         }
+    }
+
+    private boolean verifySignature(SecurityConfiguration.SigningKey signingKey, byte[] payload, byte[] providedSignature) {
+        return switch (signingKey.algorithm()) {
+            case HMAC_SHA256 -> MessageDigest.isEqual(
+                    hmacSha256(((SecurityConfiguration.SigningKey.HmacSha256) signingKey).secret(), payload),
+                    providedSignature);
+            case ED25519 -> verifyEd25519((SecurityConfiguration.SigningKey.Ed25519) signingKey, payload, providedSignature);
+        };
     }
 
     private String extractBearerToken(HttpServletRequest request) {
@@ -165,6 +174,17 @@ public final class ConfigurableRequestAuthenticator implements RequestAuthentica
                     ErrorResponse.ErrorType.INVALID_REQUEST,
                     "timestamp_out_of_window",
                     "Timestamp outside allowed skew window");
+        }
+    }
+
+    private boolean verifyEd25519(SecurityConfiguration.SigningKey.Ed25519 signingKey, byte[] payload, byte[] providedSignature) {
+        try {
+            var verifier = Signature.getInstance("Ed25519");
+            verifier.initVerify(signingKey.publicKey());
+            verifier.update(payload);
+            return verifier.verify(providedSignature);
+        } catch (GeneralSecurityException e) {
+            throw new IllegalStateException("Failed to verify signature", e);
         }
     }
 }

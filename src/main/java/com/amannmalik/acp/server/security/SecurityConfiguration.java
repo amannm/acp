@@ -2,13 +2,14 @@ package com.amannmalik.acp.server.security;
 
 import com.amannmalik.acp.util.Ensure;
 
+import java.security.PublicKey;
 import java.time.Duration;
 import java.util.*;
 
-public record SecurityConfiguration(Set<String> bearerTokens, Map<String, byte[]> hmacSecrets, Duration maxTimestampSkew) {
+public record SecurityConfiguration(Set<String> bearerTokens, Map<String, SigningKey> signingKeys, Duration maxTimestampSkew) {
     public SecurityConfiguration {
         bearerTokens = normalizeTokens(bearerTokens);
-        hmacSecrets = normalizeSecrets(hmacSecrets);
+        signingKeys = normalizeSigningKeys(signingKeys);
         maxTimestampSkew = normalizeSkew(maxTimestampSkew);
     }
 
@@ -21,25 +22,28 @@ public record SecurityConfiguration(Set<String> bearerTokens, Map<String, byte[]
         return copy;
     }
 
-    private static Map<String, byte[]> normalizeSecrets(Map<String, byte[]> secrets) {
-        var source = Ensure.notNull("security.hmac_secrets", secrets);
-        var result = new LinkedHashMap<String, byte[]>(source.size());
-        source.forEach((keyId, secret) -> {
-            var trimmedKeyId = Ensure.nonBlank("security.hmac_secret.key_id", keyId).trim();
+    private static Map<String, SigningKey> normalizeSigningKeys(Map<String, SigningKey> keys) {
+        var source = Ensure.notNull("security.signing_keys", keys);
+        var result = new LinkedHashMap<String, SigningKey>(source.size());
+        source.forEach((keyId, signingKey) -> {
+            var trimmedKeyId = Ensure.nonBlank("security.signing_key.key_id", keyId).trim();
             if (result.containsKey(trimmedKeyId)) {
-                throw new IllegalArgumentException("Duplicate HMAC key id: " + trimmedKeyId);
+                throw new IllegalArgumentException("Duplicate signing key id: " + trimmedKeyId);
             }
-            result.put(trimmedKeyId, copySecret(secret));
+            result.put(trimmedKeyId, copySigningKey(signingKey));
         });
         return Map.copyOf(result);
     }
 
-    private static byte[] copySecret(byte[] secret) {
-        var material = Ensure.notNull("security.hmac_secret.material", secret);
-        if (material.length < 16) {
-            throw new IllegalArgumentException("HMAC secret MUST be at least 16 bytes");
+    private static SigningKey copySigningKey(SigningKey signingKey) {
+        signingKey = Ensure.notNull("security.signing_key", signingKey);
+        if (signingKey instanceof SigningKey.HmacSha256 hmac) {
+            return new SigningKey.HmacSha256(hmac.secret());
         }
-        return material.clone();
+        if (signingKey instanceof SigningKey.Ed25519 ed25519) {
+            return ed25519;
+        }
+        throw new IllegalArgumentException("Unsupported signing key type: " + signingKey);
     }
 
     private static Duration normalizeSkew(Duration skew) {
@@ -51,6 +55,50 @@ public record SecurityConfiguration(Set<String> bearerTokens, Map<String, byte[]
     }
 
     public boolean signatureRequired() {
-        return !hmacSecrets.isEmpty();
+        return !signingKeys.isEmpty();
+    }
+
+    public sealed interface SigningKey permits SigningKey.HmacSha256, SigningKey.Ed25519 {
+        Algorithm algorithm();
+
+        enum Algorithm {
+            HMAC_SHA256,
+            ED25519
+        }
+
+        record HmacSha256(byte[] secret) implements SigningKey {
+            public HmacSha256 {
+                secret = copySecret(secret);
+            }
+
+            private static byte[] copySecret(byte[] secret) {
+                var material = Ensure.notNull("security.hmac_secret.material", secret);
+                if (material.length < 16) {
+                    throw new IllegalArgumentException("HMAC secret MUST be at least 16 bytes");
+                }
+                return material.clone();
+            }
+
+            @Override
+            public Algorithm algorithm() {
+                return Algorithm.HMAC_SHA256;
+            }
+
+            @Override
+            public byte[] secret() {
+                return secret.clone();
+            }
+        }
+
+        record Ed25519(PublicKey publicKey) implements SigningKey {
+            public Ed25519 {
+                publicKey = Ensure.notNull("security.ed25519.public_key", publicKey);
+            }
+
+            @Override
+            public Algorithm algorithm() {
+                return Algorithm.ED25519;
+            }
+        }
     }
 }

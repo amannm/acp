@@ -70,11 +70,11 @@ public final class ServeCommand implements Callable<Integer> {
     public ServeCommand() {
     }
 
-    private static byte[] decodeSecret(String encoded) {
+    private static byte[] decodeBase64Url(String encoded) {
         try {
             return Base64.getUrlDecoder().decode(encoded);
         } catch (IllegalArgumentException e) {
-            throw new IllegalArgumentException("Signature key MUST be base64url encoded", e);
+            throw new IllegalArgumentException("Signature key material MUST be base64url encoded", e);
         }
     }
 
@@ -140,8 +140,8 @@ public final class ServeCommand implements Callable<Integer> {
 
     private RequestAuthenticator authenticator() {
         var tokens = parseBearerTokens();
-        var secrets = parseSignatureSecrets();
-        var configuration = new SecurityConfiguration(tokens, secrets, maxTimestampSkew);
+        var signingKeys = parseSignatureSecrets();
+        var configuration = new SecurityConfiguration(tokens, signingKeys, maxTimestampSkew);
         return new ConfigurableRequestAuthenticator(configuration, Clock.systemUTC());
     }
 
@@ -177,23 +177,8 @@ public final class ServeCommand implements Callable<Integer> {
         return Set.copyOf(set);
     }
 
-    private Map<String, byte[]> parseSignatureSecrets() {
-        if (signatureKeys == null || signatureKeys.isEmpty()) {
-            return Map.of();
-        }
-        var map = new LinkedHashMap<String, byte[]>();
-        for (var entry : signatureKeys) {
-            var parts = entry.split("=", 2);
-            if (parts.length != 2) {
-                throw new IllegalArgumentException("Invalid signature key format: " + entry);
-            }
-            var keyId = parts[0];
-            if (map.containsKey(keyId)) {
-                throw new IllegalArgumentException("Duplicate signature key id: " + keyId);
-            }
-            map.put(keyId, decodeSecret(parts[1]));
-        }
-        return Map.copyOf(map);
+    private Map<String, SecurityConfiguration.SigningKey> parseSignatureSecrets() {
+        return SigningKeyParser.parse(signatureKeys);
     }
 
     private OrderWebhookPublisher webhookPublisher() {
@@ -205,7 +190,7 @@ public final class ServeCommand implements Callable<Integer> {
                     "--webhook-endpoint and --webhook-signature-key MUST be provided together");
         }
         var endpointUri = parseUri(webhookEndpoint);
-        var secret = decodeSecret(webhookSignatureKey);
+        var secret = decodeBase64Url(webhookSignatureKey);
         var client = HttpClient.newHttpClient();
         return new HttpOrderWebhookPublisher(client, endpointUri, webhookSignatureHeader, secret, Clock.systemUTC());
     }

@@ -180,7 +180,10 @@ final class DelegatePaymentServletTest {
         var checkout = new InMemoryCheckoutSessionService();
         var delegate = new InMemoryDelegatePaymentService();
         var authenticator = new ConfigurableRequestAuthenticator(
-                new SecurityConfiguration(Set.of("test"), Map.of(), java.time.Duration.ofMinutes(5)),
+                new SecurityConfiguration(
+                        Set.of("test"),
+                        Map.<String, SecurityConfiguration.SigningKey>of(),
+                        java.time.Duration.ofMinutes(5)),
                 Clock.systemUTC());
         return new JettyHttpServer(JettyHttpServer.Configuration.httpsOnly(tlsConfiguration), checkout, delegate, authenticator);
     }
