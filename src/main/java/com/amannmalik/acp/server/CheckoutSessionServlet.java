@@ -217,7 +217,7 @@ public final class CheckoutSessionServlet extends HttpServlet {
         } catch (CheckoutSessionValidationException e) {
             sendError(
                     resp,
-                    HttpServletResponse.SC_CONFLICT,
+                    e.status(),
                     ErrorResponse.ErrorType.INVALID_REQUEST,
                     e.code(),
                     e.getMessage(),

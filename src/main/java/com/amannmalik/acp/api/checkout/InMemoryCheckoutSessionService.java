@@ -5,6 +5,7 @@ import com.amannmalik.acp.api.shared.CurrencyCode;
 import com.amannmalik.acp.api.shared.MinorUnitAmount;
 import com.amannmalik.acp.spi.webhook.OrderWebhookEvent;
 import com.amannmalik.acp.spi.webhook.OrderWebhookPublisher;
+import com.amannmalik.acp.util.Ensure;
 
 import java.math.BigDecimal;
 import java.math.RoundingMode;
@@ -27,6 +28,8 @@ public final class InMemoryCheckoutSessionService implements CheckoutSessionServ
             new Link(Link.LinkType.PRIVACY_POLICY, URI.create("https://merchant.example.com/legal/privacy")));
     private static final BigDecimal TAX_RATE = new BigDecimal("0.0825");
 
+    private static final int HTTP_BAD_REQUEST = 400;
+
     private final ConcurrentMap<String, CheckoutSession> sessions = new ConcurrentHashMap<>();
     private final ConcurrentMap<String, StoredCreateRequest> createIdempotency = new ConcurrentHashMap<>();
     private final ConcurrentMap<CompleteIdempotencyKey, StoredCompleteRequest> completeIdempotency =
@@ -45,7 +48,7 @@ public final class InMemoryCheckoutSessionService implements CheckoutSessionServ
 
     public InMemoryCheckoutSessionService(
             Map<String, Long> priceBook, Clock clock, CurrencyCode currency, OrderWebhookPublisher webhookPublisher) {
-        this.priceBook = Map.copyOf(priceBook);
+        this.priceBook = validatePriceBook(priceBook);
         this.clock = Objects.requireNonNullElse(clock, Clock.systemUTC());
         this.currency = currency == null ? new CurrencyCode("usd") : currency;
         this.webhookPublisher = webhookPublisher == null ? OrderWebhookPublisher.NOOP : webhookPublisher;
@@ -72,6 +75,31 @@ public final class InMemoryCheckoutSessionService implements CheckoutSessionServ
                 "item_123", 1500L,
                 "item_456", 3000L,
                 "item_789", 5000L);
+    }
+
+    private static Map<String, Long> validatePriceBook(Map<String, Long> source) {
+        if (source == null || source.isEmpty()) {
+            throw new IllegalArgumentException("price_book MUST include at least one item");
+        }
+        var normalized = new LinkedHashMap<String, Long>(source.size());
+        source.forEach((rawId, rawPrice) -> {
+            if (rawId == null) {
+                throw new IllegalArgumentException("price_book item id MUST NOT be null");
+            }
+            var id = rawId.trim();
+            if (id.isEmpty()) {
+                throw new IllegalArgumentException("price_book item id MUST be non-blank");
+            }
+            if (normalized.containsKey(id)) {
+                throw new IllegalArgumentException("Duplicate price_book item id: " + id);
+            }
+            if (rawPrice == null) {
+                throw new IllegalArgumentException("price_book[" + id + "] MUST NOT be null");
+            }
+            Ensure.nonNegative("price_book[" + id + "]", rawPrice);
+            normalized.put(id, rawPrice);
+        });
+        return Map.copyOf(normalized);
     }
 
     private static OrderWebhookEvent.OrderStatus webhookStatusFor(CheckoutSessionStatus status) {
@@ -233,8 +261,9 @@ public final class InMemoryCheckoutSessionService implements CheckoutSessionServ
 
     private List<LineItem> priceItems(List<Item> items) {
         var result = new ArrayList<LineItem>(items.size());
-        for (var item : items) {
-            var unitPrice = priceForItem(item.id());
+        for (var index = 0; index < items.size(); index++) {
+            var item = items.get(index);
+            var unitPrice = priceForItem(item.id(), index);
             var baseAmount = unitPrice * item.quantity();
             var discount = 0L;
             var subtotal = baseAmount - discount;
@@ -379,8 +408,14 @@ public final class InMemoryCheckoutSessionService implements CheckoutSessionServ
         return "ord_%06d".formatted(orderSequence.getAndIncrement());
     }
 
-    private long priceForItem(String itemId) {
-        return priceBook.getOrDefault(itemId, 1000L);
+    private long priceForItem(String itemId, int index) {
+        var price = priceBook.get(itemId);
+        if (price == null) {
+            var param = "$.items[%d].id".formatted(index);
+            throw new CheckoutSessionValidationException(
+                    "Unknown item id: " + itemId, "unknown_item", param, HTTP_BAD_REQUEST);
+        }
+        return price;
     }
 
     private CheckoutSession createNewSession(CheckoutSessionCreateRequest request) {

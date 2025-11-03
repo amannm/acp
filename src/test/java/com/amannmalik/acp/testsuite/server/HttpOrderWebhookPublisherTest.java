@@ -33,6 +33,7 @@ import javax.net.ssl.SSLSession;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
+import static org.junit.jupiter.api.Assertions.assertThrows;
 
 final class HttpOrderWebhookPublisherTest {
     private static final byte[] SECRET = Base64.getUrlDecoder().decode("c2VjcmV0X3Rlc3Rfc2VjcmV0MTIzNDU2");
@@ -83,9 +84,41 @@ final class HttpOrderWebhookPublisherTest {
         assertEquals(150, refund.getInt("amount"));
     }
 
+    @Test
+    void publishThrowsWhenEndpointReturnsErrorStatus() {
+        var clock = Clock.fixed(Instant.parse("2025-10-30T18:00:00Z"), ZoneOffset.UTC);
+        var client = new RecordingHttpClient(503);
+        OrderWebhookPublisher publisher = new HttpOrderWebhookPublisher(
+                client,
+                URI.create("https://example.com/webhook"),
+                "Merchant-Signature",
+                SECRET,
+                clock,
+                () -> "req-webhook-error");
+
+        var event = new OrderWebhookEvent(
+                OrderWebhookEvent.Type.ORDER_CREATE,
+                "csn_999",
+                OrderWebhookEvent.OrderStatus.CREATED,
+                URI.create("https://merchant.example.com/orders/ord_999"),
+                List.of());
+
+        var exception = assertThrows(IllegalStateException.class, () -> publisher.publish(event));
+        assertEquals("Webhook endpoint responded with HTTP 503", exception.getMessage());
+    }
+
     private static final class RecordingHttpClient extends HttpClient {
         private HttpRequest recordedRequest;
         private String recordedBody;
+        private final int statusCode;
+
+        private RecordingHttpClient() {
+            this(200);
+        }
+
+        private RecordingHttpClient(int statusCode) {
+            this.statusCode = statusCode;
+        }
 
         @Override
         public Optional<java.net.CookieHandler> cookieHandler() {
@@ -141,11 +174,11 @@ final class HttpOrderWebhookPublisherTest {
                 throws IOException, InterruptedException {
             this.recordedRequest = request;
             this.recordedBody = readBody(request.bodyPublisher().orElseThrow());
-            var subscriber = responseBodyHandler.apply(new ResponseInfoImpl());
+            var subscriber = responseBodyHandler.apply(new ResponseInfoImpl(statusCode));
             subscriber.onSubscribe(new NoopSubscription());
             subscriber.onNext(List.of());
             subscriber.onComplete();
-            return new SimpleHttpResponse<>(request);
+            return new SimpleHttpResponse<>(request, statusCode);
         }
 
         @Override
@@ -199,9 +232,15 @@ final class HttpOrderWebhookPublisherTest {
     }
 
     private static final class ResponseInfoImpl implements HttpResponse.ResponseInfo {
+        private final int statusCode;
+
+        private ResponseInfoImpl(int statusCode) {
+            this.statusCode = statusCode;
+        }
+
         @Override
         public int statusCode() {
-            return 200;
+            return statusCode;
         }
 
         @Override
@@ -227,14 +266,16 @@ final class HttpOrderWebhookPublisherTest {
 
     private static final class SimpleHttpResponse<T> implements HttpResponse<T> {
         private final HttpRequest request;
+        private final int statusCode;
 
-        private SimpleHttpResponse(HttpRequest request) {
+        private SimpleHttpResponse(HttpRequest request, int statusCode) {
             this.request = request;
+            this.statusCode = statusCode;
         }
 
         @Override
         public int statusCode() {
-            return 200;
+            return statusCode;
         }
 
         @Override

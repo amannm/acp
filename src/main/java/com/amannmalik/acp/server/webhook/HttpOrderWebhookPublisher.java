@@ -65,7 +65,11 @@ public final class HttpOrderWebhookPublisher implements OrderWebhookPublisher {
                 .POST(HttpRequest.BodyPublishers.ofString(payload))
                 .build();
         try {
-            httpClient.send(request, HttpResponse.BodyHandlers.discarding());
+            var response = httpClient.send(request, HttpResponse.BodyHandlers.discarding());
+            var status = response.statusCode();
+            if (status < 200 || status >= 300) {
+                throw new IllegalStateException("Webhook endpoint responded with HTTP " + status);
+            }
         } catch (InterruptedException e) {
             Thread.currentThread().interrupt();
             throw new IllegalStateException("Webhook dispatch interrupted", e);

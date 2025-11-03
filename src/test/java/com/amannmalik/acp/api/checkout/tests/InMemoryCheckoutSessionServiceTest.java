@@ -98,6 +98,20 @@ final class InMemoryCheckoutSessionServiceTest {
                 && "$.fulfillment_address".equals(info.param()));
     }
 
+    @Test
+    void createWithUnknownItemFailsFast() {
+        var request = new CheckoutSessionCreateRequest(
+                List.of(new Item("unknown_item", 1)),
+                new Buyer("John", "Doe", "john@example.com", null),
+                fulfillmentAddress());
+
+        var exception = assertThrows(
+                CheckoutSessionValidationException.class, () -> service.create(request, null));
+        assertEquals("unknown_item", exception.code());
+        assertEquals("$.items[0].id", exception.param());
+        assertEquals(400, exception.status());
+    }
+
     private CheckoutSessionCreateRequest createRequest() {
         return new CheckoutSessionCreateRequest(
                 List.of(new Item("item_123", 1)),

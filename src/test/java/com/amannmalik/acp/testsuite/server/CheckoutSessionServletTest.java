@@ -110,6 +110,31 @@ final class CheckoutSessionServletTest {
     }
 
     @Test
+    void createWithUnknownItemReturns400() throws Exception {
+        try (var tls = TlsTestSupport.createTlsContext();
+                var server = newServer(tls.configuration())) {
+            server.start();
+            var client = HttpClient.newBuilder().sslContext(tls.sslContext()).build();
+            var baseUri = URI.create("https://localhost:" + server.httpsPort());
+
+            var response = sendCreateRequest(
+                    client,
+                    baseUri,
+                    """
+                    {"items":[{"id":"unknown_item","quantity":1}]}
+                    """,
+                    null,
+                    "req-create-unknown");
+
+            assertEquals(400, response.statusCode());
+            var errorJson = json(response.body());
+            assertEquals("invalid_request", errorJson.getString("type"));
+            assertEquals("unknown_item", errorJson.getString("code"));
+            assertEquals("$.items[0].id", errorJson.getString("param"));
+        }
+    }
+
+    @Test
     void completeIdempotencyReturnsSameOrder() throws Exception {
         try (var tls = TlsTestSupport.createTlsContext();
                 var server = newServer(tls.configuration())) {
