@@ -308,7 +308,14 @@ public final class InMemoryCheckoutSessionService implements CheckoutSessionServ
                         now.plus(Duration.ofDays(3)),
                         new MinorUnitAmount(1500),
                         MinorUnitAmount.zero(),
-                        new MinorUnitAmount(1500)));
+                        new MinorUnitAmount(1500)),
+                new FulfillmentOption.Digital(
+                        "fulfillment_option_digital",
+                        "Instant download",
+                        null,
+                        MinorUnitAmount.zero(),
+                        MinorUnitAmount.zero(),
+                        MinorUnitAmount.zero()));
     }
 
     private FulfillmentOptionId resolveFulfillmentOptionId(
@@ -368,13 +375,27 @@ public final class InMemoryCheckoutSessionService implements CheckoutSessionServ
                     "$.fulfillment_option_id",
                     "Select a fulfillment option before completing checkout."));
         }
-        var requiresAddress = fulfillmentOptions.stream().anyMatch(option -> option instanceof FulfillmentOption.Shipping);
+        var requiresAddress = requiresShippingAddress(fulfillmentOptions, fulfillmentOptionId);
         if (requiresAddress && fulfillmentAddress == null) {
             requirements.add(new MissingRequirement(
                     "$.fulfillment_address",
                     "Provide fulfillment_address for shipping fulfillment."));
         }
         return new Readiness(requirements.isEmpty(), List.copyOf(requirements));
+    }
+
+    private boolean requiresShippingAddress(
+            List<FulfillmentOption> fulfillmentOptions, FulfillmentOptionId fulfillmentOptionId) {
+        if (fulfillmentOptions.isEmpty()) {
+            return false;
+        }
+        if (fulfillmentOptionId == null) {
+            return fulfillmentOptions.stream().allMatch(option -> option instanceof FulfillmentOption.Shipping);
+        }
+        var target = fulfillmentOptionId.value();
+        return fulfillmentOptions.stream()
+                .filter(option -> option.id().equals(target))
+                .anyMatch(option -> option instanceof FulfillmentOption.Shipping);
     }
 
     private List<Message> messagesForStatus(CheckoutSessionStatus status, Readiness readiness) {

@@ -69,4 +69,28 @@ final class AddressValidationTest {
                 "US",
                 postal));
     }
+
+    @Test
+    void allowsMissingStateForInternationalAddresses() {
+        assertDoesNotThrow(() -> new Address(
+                "Name",
+                "Line 1",
+                null,
+                "City",
+                null,
+                "FR",
+                "75001"));
+    }
+
+    @Test
+    void rejectsBlankStateWhenProvided() {
+        assertThrows(IllegalArgumentException.class, () -> new Address(
+                "Name",
+                "Line 1",
+                null,
+                "City",
+                "",
+                "FR",
+                "75001"));
+    }
 }

@@ -99,6 +99,29 @@ final class InMemoryCheckoutSessionServiceTest {
     }
 
     @Test
+    void selectingDigitalFulfillmentOptionRemovesAddressRequirement() {
+        var createRequest = new CheckoutSessionCreateRequest(
+                List.of(new Item("item_123", 1)),
+                new Buyer("Alex", "Doe", "alex@example.com", null),
+                null);
+
+        var session = service.create(createRequest, null);
+        assertEquals(CheckoutSessionStatus.NOT_READY_FOR_PAYMENT, session.status());
+
+        var updateRequest = new CheckoutSessionUpdateRequest(
+                null,
+                null,
+                null,
+                new FulfillmentOptionId("fulfillment_option_digital"));
+
+        var updated = service.update(session.id(), updateRequest);
+
+        assertEquals(CheckoutSessionStatus.READY_FOR_PAYMENT, updated.status());
+        assertTrue(updated.messages().isEmpty());
+        assertEquals("fulfillment_option_digital", updated.fulfillmentOptionId().value());
+    }
+
+    @Test
     void createWithUnknownItemFailsFast() {
         var request = new CheckoutSessionCreateRequest(
                 List.of(new Item("unknown_item", 1)),

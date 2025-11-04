@@ -13,7 +13,7 @@ final class AddressJson {
                 JsonSupport.requireString(object, "line_one"),
                 JsonSupport.optionalStringAllowBlank(object, "line_two"),
                 JsonSupport.requireString(object, "city"),
-                JsonSupport.requireString(object, "state"),
+                JsonSupport.optionalString(object, "state"),
                 JsonSupport.requireString(object, "country"),
                 JsonSupport.requireString(object, "postal_code"));
     }
@@ -32,9 +32,11 @@ final class AddressJson {
         if (address.lineTwo() != null) {
             builder.add("line_two", address.lineTwo());
         }
+        builder.add("city", address.city());
+        if (address.state() != null) {
+            builder.add("state", address.state());
+        }
         return builder
-                .add("city", address.city())
-                .add("state", address.state())
                 .add("country", address.country())
                 .add("postal_code", address.postalCode());
     }
