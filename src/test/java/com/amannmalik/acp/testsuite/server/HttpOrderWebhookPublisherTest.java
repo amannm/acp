@@ -82,6 +82,9 @@ final class HttpOrderWebhookPublisherTest {
         var refund = refunds.getJsonObject(0);
         assertEquals("original_payment", refund.getString("type"));
         assertEquals(150, refund.getInt("amount"));
+        assertEquals(
+                expectedSignature(client.recordedBody),
+                signature);
     }
 
     @Test
@@ -311,6 +314,17 @@ final class HttpOrderWebhookPublisherTest {
         @Override
         public HttpClient.Version version() {
             return HttpClient.Version.HTTP_1_1;
+        }
+    }
+
+    private static String expectedSignature(String payload) {
+        try {
+            var mac = javax.crypto.Mac.getInstance("HmacSHA256");
+            mac.init(new javax.crypto.spec.SecretKeySpec(SECRET, "HmacSHA256"));
+            var signature = mac.doFinal(payload.getBytes(StandardCharsets.UTF_8));
+            return Base64.getUrlEncoder().withoutPadding().encodeToString(signature);
+        } catch (Exception e) {
+            throw new IllegalStateException("Unable to compute expected signature", e);
         }
     }
 }

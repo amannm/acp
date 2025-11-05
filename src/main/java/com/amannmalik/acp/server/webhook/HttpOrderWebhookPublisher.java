@@ -14,7 +14,6 @@ import java.net.http.*;
 import java.nio.charset.StandardCharsets;
 import java.security.GeneralSecurityException;
 import java.time.Clock;
-import java.time.Instant;
 import java.util.Base64;
 import java.util.List;
 import java.util.Objects;
@@ -55,7 +54,7 @@ public final class HttpOrderWebhookPublisher implements OrderWebhookPublisher {
     public void publish(OrderWebhookEvent event) {
         var payload = serialize(event);
         var timestamp = clock.instant();
-        var signature = sign(payload, timestamp);
+        var signature = sign(payload);
         var requestId = requestIdSupplier.get();
         var request = HttpRequest.newBuilder(endpoint)
                 .header("Content-Type", "application/json")
@@ -102,10 +101,9 @@ public final class HttpOrderWebhookPublisher implements OrderWebhookPublisher {
         return builder;
     }
 
-    private String sign(String payload, Instant timestamp) {
+    private String sign(String payload) {
         var mac = newMac();
-        var body = (timestamp.toString() + "\n" + payload).getBytes(StandardCharsets.UTF_8);
-        var signature = mac.doFinal(body);
+        var signature = mac.doFinal(payload.getBytes(StandardCharsets.UTF_8));
         return SIGNATURE_ENCODER.encodeToString(signature);
     }
 

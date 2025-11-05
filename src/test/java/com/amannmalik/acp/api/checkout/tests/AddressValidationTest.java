@@ -71,8 +71,8 @@ final class AddressValidationTest {
     }
 
     @Test
-    void allowsMissingStateForInternationalAddresses() {
-        assertDoesNotThrow(() -> new Address(
+    void rejectsMissingState() {
+        assertThrows(IllegalArgumentException.class, () -> new Address(
                 "Name",
                 "Line 1",
                 null,

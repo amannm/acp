@@ -22,9 +22,8 @@ public record Address(
         ensureMaxLength("address.line_one", lineOne, LINE_MAX);
         city = Ensure.nonBlank("address.city", city);
         ensureMaxLength("address.city", city, CITY_MAX);
-        if (state != null && state.isBlank()) {
-            throw new IllegalArgumentException("address.state MUST be non-blank when provided");
-        }
+        state = Ensure.nonBlank("address.state", state);
+        ensureMaxLength("address.state", state, LINE_MAX);
         country = Ensure.nonBlank("address.country", country);
         ensureExactLength("address.country", country, 2);
         postalCode = Ensure.nonBlank("address.postal_code", postalCode);

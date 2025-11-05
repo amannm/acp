@@ -1,6 +1,7 @@
 package com.amannmalik.acp.codec.tests;
 
 import com.amannmalik.acp.codec.CheckoutSessionJsonCodec;
+import com.amannmalik.acp.codec.JsonDecodingException;
 import com.amannmalik.acp.api.checkout.model.*;
 import com.amannmalik.acp.api.shared.CurrencyCode;
 import com.amannmalik.acp.api.shared.MinorUnitAmount;
@@ -40,6 +41,25 @@ final class CheckoutSessionJsonCodecTest {
         var address = json.getJsonObject("fulfillment_address");
         assertTrue(address.containsKey("line_two"), "line_two should be present");
         assertEquals("", address.getString("line_two"));
+    }
+
+    @Test
+    void readCreateRequest_requiresStateInAddress() throws Exception {
+        var examples = readExamples("specification/2025-09-29/examples/examples.agentic_checkout.json");
+        var requestJson = examples.getJsonObject("create_checkout_session_request");
+        var addressWithoutState = Json.createObjectBuilder();
+        requestJson.getJsonObject("fulfillment_address").forEach((key, value) -> {
+            if (!"state".equals(key)) {
+                addressWithoutState.add(key, value);
+            }
+        });
+        var withoutState = Json.createObjectBuilder(requestJson)
+                .add("fulfillment_address", addressWithoutState.build())
+                .build();
+        var codec = new CheckoutSessionJsonCodec();
+        assertThrows(
+                JsonDecodingException.class,
+                () -> codec.readCreateRequest(jsonBytes(withoutState)));
     }
 
     private static CheckoutSession sampleSession() {
