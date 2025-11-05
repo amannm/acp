@@ -39,6 +39,26 @@ final class DelegatePaymentJsonCodecTest {
         assertThrows(IllegalArgumentException.class, () -> codec.readRequest(jsonBytes(invalid)));
     }
 
+    @Test
+    void readRequest_defaultsVirtualToFalseWhenMissing() throws Exception {
+        var examples = readExamples("specification/2025-09-29/examples/examples.delegate_payment.json");
+        var requestJson = examples.getJsonObject("delegate_payment_request");
+        var paymentMethodWithoutVirtual = Json.createObjectBuilder();
+        requestJson.getJsonObject("payment_method").forEach((key, value) -> {
+            if (!"virtual".equals(key)) {
+                paymentMethodWithoutVirtual.add(key, value);
+            }
+        });
+        var mutated = Json.createObjectBuilder(requestJson)
+                .add("payment_method", paymentMethodWithoutVirtual.build())
+                .build();
+        var codec = new DelegatePaymentJsonCodec();
+
+        var request = codec.readRequest(jsonBytes(mutated));
+
+        assertFalse(request.paymentMethod().virtual());
+    }
+
     private static InputStream jsonBytes(JsonObject object) {
         return new ByteArrayInputStream(object.toString().getBytes(StandardCharsets.UTF_8));
     }

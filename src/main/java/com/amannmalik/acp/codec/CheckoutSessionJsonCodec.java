@@ -8,10 +8,16 @@ import jakarta.json.*;
 import java.io.InputStream;
 import java.io.OutputStream;
 import java.time.Instant;
+import java.util.ArrayList;
 import java.util.List;
+import java.util.Locale;
+import java.util.stream.Collectors;
 
 /// See specification/2025-09-29/spec/openapi/openapi.agentic_checkout.yaml
 public final class CheckoutSessionJsonCodec {
+    private static final PaymentProvider DEFAULT_PAYMENT_PROVIDER = new PaymentProvider(
+            PaymentProvider.Provider.STRIPE, List.of(PaymentProvider.PaymentMethod.CARD));
+
     public CheckoutSessionJsonCodec() {
     }
 
@@ -188,6 +194,134 @@ public final class CheckoutSessionJsonCodec {
                 .add("permalink_url", order.permalinkUrl().toString());
     }
 
+    private static LineItem mapLineItem(JsonObject jsonObject) {
+        var item = mapItem(JsonSupport.requireObject(jsonObject, "item"));
+        return new LineItem(
+                JsonSupport.requireString(jsonObject, "id"),
+                item,
+                JsonSupport.requireAmount(jsonObject, "base_amount"),
+                JsonSupport.requireAmount(jsonObject, "discount"),
+                JsonSupport.requireAmount(jsonObject, "subtotal"),
+                JsonSupport.requireAmount(jsonObject, "tax"),
+                JsonSupport.requireAmount(jsonObject, "total"));
+    }
+
+    private static List<LineItem> mapLineItems(JsonArray array) {
+        var result = new ArrayList<LineItem>(array.size());
+        for (var value : array) {
+            result.add(mapLineItem(value.asJsonObject()));
+        }
+        return List.copyOf(result);
+    }
+
+    private static List<FulfillmentOption> mapFulfillmentOptions(JsonArray array) {
+        var result = new ArrayList<FulfillmentOption>(array.size());
+        for (var value : array) {
+            var jsonObject = value.asJsonObject();
+            var type = JsonSupport.requireString(jsonObject, "type").toLowerCase(Locale.ROOT);
+            var id = JsonSupport.requireString(jsonObject, "id");
+            var title = JsonSupport.requireString(jsonObject, "title");
+            var subtitle = JsonSupport.optionalStringAllowBlank(jsonObject, "subtitle");
+            var subtotal = JsonSupport.requireAmount(jsonObject, "subtotal");
+            var tax = JsonSupport.requireAmount(jsonObject, "tax");
+            var total = JsonSupport.requireAmount(jsonObject, "total");
+            switch (type) {
+                case "shipping" -> {
+                    var carrier = JsonSupport.optionalStringAllowBlank(jsonObject, "carrier");
+                    var earliest = jsonObject.containsKey("earliest_delivery_time") && !jsonObject.isNull("earliest_delivery_time")
+                            ? Instant.parse(JsonSupport.requireString(jsonObject, "earliest_delivery_time"))
+                            : null;
+                    var latest = jsonObject.containsKey("latest_delivery_time") && !jsonObject.isNull("latest_delivery_time")
+                            ? Instant.parse(JsonSupport.requireString(jsonObject, "latest_delivery_time"))
+                            : null;
+                    result.add(new FulfillmentOption.Shipping(
+                            id,
+                            title,
+                            subtitle,
+                            carrier,
+                            earliest,
+                            latest,
+                            subtotal,
+                            tax,
+                            total));
+                }
+                case "digital" -> result.add(new FulfillmentOption.Digital(id, title, subtitle, subtotal, tax, total));
+                default -> throw new JsonDecodingException("Unknown fulfillment option type: " + type);
+            }
+        }
+        return List.copyOf(result);
+    }
+
+    private static List<Total> mapTotals(JsonArray array) {
+        var totals = new ArrayList<Total>(array.size());
+        for (var value : array) {
+            var jsonObject = value.asJsonObject();
+            var type = Total.TotalType.valueOf(
+                    JsonSupport.requireString(jsonObject, "type").toUpperCase(Locale.ROOT));
+            totals.add(new Total(
+                    type,
+                    JsonSupport.requireString(jsonObject, "display_text"),
+                    JsonSupport.requireAmount(jsonObject, "amount")));
+        }
+        return List.copyOf(totals);
+    }
+
+    private static List<Message> mapMessages(JsonArray array) {
+        var messages = new ArrayList<Message>(array.size());
+        for (var value : array) {
+            var jsonObject = value.asJsonObject();
+            var type = JsonSupport.requireString(jsonObject, "type").toLowerCase(Locale.ROOT);
+            var contentType = Message.ContentType.valueOf(
+                    JsonSupport.requireString(jsonObject, "content_type").toUpperCase(Locale.ROOT));
+            var content = JsonSupport.requireString(jsonObject, "content");
+            var param = JsonSupport.optionalStringAllowBlank(jsonObject, "param");
+            switch (type) {
+                case "info" -> messages.add(new Message.Info(param, contentType, content));
+                case "error" -> {
+                    var code = Message.ErrorCode.valueOf(
+                            JsonSupport.requireString(jsonObject, "code").toUpperCase(Locale.ROOT));
+                    messages.add(new Message.Error(code, param, contentType, content));
+                }
+                default -> throw new JsonDecodingException("Unknown message type: " + type);
+            }
+        }
+        return List.copyOf(messages);
+    }
+
+    private static List<Link> mapLinks(JsonArray array) {
+        var links = new ArrayList<Link>(array.size());
+        for (var value : array) {
+            var jsonObject = value.asJsonObject();
+            var type = Link.LinkType.valueOf(
+                    JsonSupport.requireString(jsonObject, "type").toUpperCase(Locale.ROOT));
+            links.add(new Link(type, java.net.URI.create(JsonSupport.requireString(jsonObject, "url"))));
+        }
+        return List.copyOf(links);
+    }
+
+    private static Order mapOrder(JsonObject jsonObject) {
+        if (jsonObject == null) {
+            return null;
+        }
+        return new Order(
+                JsonSupport.requireString(jsonObject, "id"),
+                new CheckoutSessionId(JsonSupport.requireString(jsonObject, "checkout_session_id")),
+                java.net.URI.create(JsonSupport.requireString(jsonObject, "permalink_url")));
+    }
+
+    private static PaymentProvider mapPaymentProvider(JsonObject jsonObject) {
+        if (jsonObject == null) {
+            return null;
+        }
+        var provider = PaymentProvider.Provider.valueOf(
+                JsonSupport.requireString(jsonObject, "provider").toUpperCase(Locale.ROOT));
+        var methods = jsonObject.getJsonArray("supported_payment_methods").stream()
+                .map(value -> ((JsonString) value).getString())
+                .map(value -> PaymentProvider.PaymentMethod.valueOf(value.toUpperCase(Locale.ROOT)))
+                .collect(Collectors.toUnmodifiableList());
+        return new PaymentProvider(provider, methods);
+    }
+
     private static List<Item> mapItemsArray(JsonArray array) {
         return array.stream()
                 .map(JsonValue::asJsonObject)
@@ -249,6 +383,44 @@ public final class CheckoutSessionJsonCodec {
             builder.add("order", writeOrder(session.order()));
         }
         ErrorJson.writeObject(builder, outputStream);
+    }
+
+    public CheckoutSession readCheckoutSession(InputStream inputStream) {
+        var root = readObject(inputStream);
+        var id = new CheckoutSessionId(JsonSupport.requireString(root, "id"));
+        var buyer = readBuyerOrNull(root, "buyer");
+        var provider = root.containsKey("payment_provider") && !root.isNull("payment_provider")
+                ? mapPaymentProvider(root.getJsonObject("payment_provider"))
+                : null;
+        if (provider == null) {
+            provider = DEFAULT_PAYMENT_PROVIDER;
+        }
+        var status = CheckoutSessionStatus.fromJsonValue(JsonSupport.requireString(root, "status"));
+        var currency = new com.amannmalik.acp.api.shared.CurrencyCode(JsonSupport.requireString(root, "currency"));
+        var lineItems = mapLineItems(JsonSupport.requireArray(root, "line_items"));
+        var fulfillmentAddress = AddressJson.readOptional(root, "fulfillment_address");
+        var fulfillmentOptions = mapFulfillmentOptions(JsonSupport.requireArray(root, "fulfillment_options"));
+        var fulfillmentOptionId = root.containsKey("fulfillment_option_id") && !root.isNull("fulfillment_option_id")
+                ? new FulfillmentOptionId(JsonSupport.requireString(root, "fulfillment_option_id"))
+                : null;
+        var totals = mapTotals(JsonSupport.requireArray(root, "totals"));
+        var messages = mapMessages(JsonSupport.requireArray(root, "messages"));
+        var links = mapLinks(JsonSupport.requireArray(root, "links"));
+        var order = root.containsKey("order") && !root.isNull("order") ? mapOrder(root.getJsonObject("order")) : null;
+        return new CheckoutSession(
+                id,
+                buyer,
+                provider,
+                status,
+                currency,
+                lineItems,
+                fulfillmentAddress,
+                fulfillmentOptions,
+                fulfillmentOptionId,
+                totals,
+                messages,
+                links,
+                order);
     }
 
     public void writeError(OutputStream outputStream, ErrorResponse error) {

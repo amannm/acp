@@ -27,6 +27,7 @@ public final class DelegatePaymentJsonCodec {
         }
         var cardNumberType = PaymentMethodCard.CardNumberType.valueOf(
                 JsonSupport.requireString(object, "card_number_type").toUpperCase());
+        var virtual = object.getBoolean("virtual", false);
         var cryptogram = JsonSupport.optionalString(object, "cryptogram");
         var eciValue = JsonSupport.optionalString(object, "eci_value");
         List<PaymentMethodCard.Check> checks;
@@ -41,7 +42,7 @@ public final class DelegatePaymentJsonCodec {
         Map<String, String> metadata = mapMetadata(JsonSupport.requireObject(object, "metadata"));
         return new PaymentMethodCard(
                 cardNumberType,
-                object.getBoolean("virtual"),
+                virtual,
                 JsonSupport.requireString(object, "number"),
                 JsonSupport.optionalString(object, "exp_month"),
                 JsonSupport.optionalString(object, "exp_year"),

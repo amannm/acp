@@ -9,10 +9,12 @@ import com.amannmalik.acp.api.shared.CurrencyCode;
 import com.amannmalik.acp.codec.DelegatePaymentJsonCodec;
 import jakarta.json.Json;
 import jakarta.json.JsonObject;
+import jakarta.json.JsonString;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.Test;
 
 import java.io.ByteArrayInputStream;
+import java.io.ByteArrayOutputStream;
 import java.io.InputStream;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
@@ -20,6 +22,7 @@ import java.nio.file.Path;
 import java.time.Instant;
 import java.util.List;
 import java.util.Map;
+import java.util.stream.Collectors;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
@@ -77,6 +80,25 @@ final class DelegatePaymentJsonCodecExamplesTest {
         Map<String, String> metadata = request.metadata();
         assertEquals("q4", metadata.get("campaign"));
         assertEquals("chatgpt_checkout", metadata.get("source"));
+    }
+
+    @Test
+    void responseRoundTripsSpecExample() throws Exception {
+        var responseJson = examples.getJsonObject("delegate_payment_success_response");
+
+        var response = new com.amannmalik.acp.api.delegatepayment.model.DelegatePaymentResponse(
+                responseJson.getString("id"),
+                Instant.parse(responseJson.getString("created")),
+                responseJson.getJsonObject("metadata").entrySet().stream()
+                        .collect(Collectors.toMap(
+                                Map.Entry::getKey,
+                                entry -> ((JsonString) entry.getValue()).getString())));
+
+        var output = new ByteArrayOutputStream();
+        codec.writeResponse(output, response);
+        var actual = Json.createReader(new ByteArrayInputStream(output.toByteArray())).readObject();
+
+        assertEquals(responseJson, actual);
     }
 
     private static Path examplePath(String filename) {
