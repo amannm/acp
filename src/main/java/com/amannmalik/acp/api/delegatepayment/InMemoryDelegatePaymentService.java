@@ -56,11 +56,17 @@ public final class InMemoryDelegatePaymentService implements DelegatePaymentServ
     private void validateAllowance(DelegatePaymentRequest request) {
         var allowance = request.allowance();
         if (allowance.maxAmount().value() <= 0L) {
-            throw new DelegatePaymentValidationException("allowance.max_amount MUST be > 0");
+            throw new DelegatePaymentValidationException(
+                    "allowance.max_amount MUST be > 0",
+                    "invalid_card",
+                    "$.allowance.max_amount");
         }
         var now = clock.instant();
         if (!allowance.expiresAt().isAfter(now)) {
-            throw new DelegatePaymentValidationException("allowance.expires_at MUST be in the future");
+            throw new DelegatePaymentValidationException(
+                    "allowance.expires_at MUST be in the future",
+                    "invalid_card",
+                    "$.allowance.expires_at");
         }
     }
 

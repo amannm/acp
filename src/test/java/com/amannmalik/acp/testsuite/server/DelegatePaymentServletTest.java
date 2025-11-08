@@ -96,7 +96,7 @@ final class DelegatePaymentServletTest {
 
             assertEquals(409, second.statusCode());
             var errorJson = Json.createReader(new StringReader(second.body())).readObject();
-            assertEquals("request_not_idempotent", errorJson.getString("type"));
+            assertEquals("invalid_request", errorJson.getString("type"));
             assertEquals("idempotency_conflict", errorJson.getString("code"));
         }
     }
@@ -111,7 +111,28 @@ final class DelegatePaymentServletTest {
             var response = sendDelegatePaymentRequest(client, serverBaseUri(server), "idem_expired", expiredBody);
 
             assertEquals(422, response.statusCode());
-            assertTrue(response.body().contains("expires_at"));
+            var errorJson = Json.createReader(new StringReader(response.body())).readObject();
+            assertEquals("invalid_request", errorJson.getString("type"));
+            assertEquals("invalid_card", errorJson.getString("code"));
+            assertEquals("$.allowance.expires_at", errorJson.getString("param"));
+        }
+    }
+
+    @Test
+    void zeroMaxAmountReturns422() throws Exception {
+        try (var tls = TlsTestSupport.createTlsContext();
+                var server = newServer(tls.configuration())) {
+            server.start();
+            var client = HttpClient.newBuilder().sslContext(tls.sslContext()).build();
+            var body = VALID_REQUEST_BODY.replace("\"max_amount\": 2000", "\"max_amount\": 0");
+
+            var response = sendDelegatePaymentRequest(client, serverBaseUri(server), "idem_zero_amount", body);
+
+            assertEquals(422, response.statusCode());
+            var errorJson = Json.createReader(new StringReader(response.body())).readObject();
+            assertEquals("invalid_request", errorJson.getString("type"));
+            assertEquals("invalid_card", errorJson.getString("code"));
+            assertEquals("$.allowance.max_amount", errorJson.getString("param"));
         }
     }
 
@@ -155,7 +176,7 @@ final class DelegatePaymentServletTest {
             assertEquals(400, response.statusCode());
             var errorJson = Json.createReader(new StringReader(response.body())).readObject();
             assertEquals("invalid_request", errorJson.getString("type"));
-            assertEquals("invalid_request", errorJson.getString("code"));
+            assertEquals("invalid_card", errorJson.getString("code"));
         }
     }
 

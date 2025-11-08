@@ -116,7 +116,7 @@ public final class DelegatePaymentServlet extends HttpServlet {
             sendError(
                     resp,
                     HttpServletResponse.SC_CONFLICT,
-                    ErrorResponse.ErrorType.REQUEST_NOT_IDEMPOTENT,
+                    ErrorResponse.ErrorType.INVALID_REQUEST,
                     "idempotency_conflict",
                     e.getMessage(),
                     null,
@@ -135,16 +135,16 @@ public final class DelegatePaymentServlet extends HttpServlet {
                     resp,
                     422,
                     ErrorResponse.ErrorType.INVALID_REQUEST,
-                    "invalid_request",
+                    e.code(),
                     e.getMessage(),
-                    null,
+                    e.param(),
                     req);
         } catch (JsonDecodingException | IllegalArgumentException e) {
             sendError(
                     resp,
                     HttpServletResponse.SC_BAD_REQUEST,
                     ErrorResponse.ErrorType.INVALID_REQUEST,
-                    "invalid_request",
+                    "invalid_card",
                     e.getMessage(),
                     null,
                     req);
