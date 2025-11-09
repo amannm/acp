@@ -7,6 +7,7 @@ import com.amannmalik.acp.server.JettyHttpServer;
 import com.amannmalik.acp.server.security.ConfigurableRequestAuthenticator;
 import com.amannmalik.acp.server.security.SecurityConfiguration;
 import com.amannmalik.acp.server.TlsConfiguration;
+import com.amannmalik.acp.testutil.SigningTestSupport;
 import com.amannmalik.acp.testutil.TlsTestSupport;
 
 import jakarta.json.Json;
@@ -19,6 +20,9 @@ import java.net.http.HttpClient;
 import java.net.http.HttpRequest;
 import java.net.http.HttpResponse;
 import java.time.Clock;
+import java.time.Instant;
+import java.time.ZoneOffset;
+import java.util.Base64;
 import java.util.Map;
 import java.util.Set;
 
@@ -62,6 +66,9 @@ final class DelegatePaymentServletTest {
               "metadata": {"source": "test"}
             }
             """;
+
+    private static final String SIGNABLE_REQUEST_BODY =
+            "{\"allowance\":{\"checkout_session_id\":\"csn_sig\",\"currency\":\"usd\",\"expires_at\":\"2030-01-01T00:00:00Z\",\"max_amount\":2000,\"merchant_id\":\"acme\",\"reason\":\"one_time\"},\"metadata\":{\"source\":\"test\"},\"payment_method\":{\"card_number_type\":\"fpan\",\"display_card_funding_type\":\"credit\",\"metadata\":{\"issuer\":\"demo\"},\"number\":\"4242424242424242\",\"type\":\"card\",\"virtual\":false},\"risk_signals\":[{\"action\":\"authorized\",\"score\":1,\"type\":\"card_testing\"}]}";
 
     @Test
     void createDelegatePaymentToken() throws Exception {
@@ -180,6 +187,54 @@ final class DelegatePaymentServletTest {
         }
     }
 
+    @Test
+    void delegatePaymentRequiresSignatureWhenConfigured() throws Exception {
+        var secret = Base64.getUrlDecoder().decode("c2lnbmVkX3Rlc3Qtc2VjcmV0XzEyMzQ1Njc4OTA");
+        var securityConfiguration = new SecurityConfiguration(
+                Set.of("test"),
+                Map.of("sig", new SecurityConfiguration.SigningKey.HmacSha256(secret)),
+                java.time.Duration.ofMinutes(5));
+        var clock = Clock.fixed(Instant.parse("2025-11-09T12:00:00Z"), ZoneOffset.UTC);
+        try (var tls = TlsTestSupport.createTlsContext();
+                var server = newServer(tls.configuration(), securityConfiguration, clock)) {
+            server.start();
+            var client = HttpClient.newBuilder().sslContext(tls.sslContext()).build();
+            var baseUri = serverBaseUri(server);
+            var timestamp = clock.instant().toString();
+
+            var missingSignatureRequest = HttpRequest.newBuilder(baseUri.resolve("/agentic_commerce/delegate_payment"))
+                    .header("Authorization", "Bearer test")
+                    .header("API-Version", ApiVersion.SUPPORTED)
+                    .header("Content-Type", "application/json")
+                    .header("Idempotency-Key", "idem-sig-missing")
+                    .header("Request-Id", "req-sig-missing")
+                    .header("Timestamp", timestamp)
+                    .POST(HttpRequest.BodyPublishers.ofString(SIGNABLE_REQUEST_BODY))
+                    .build();
+            var missingSignatureResponse = client.send(missingSignatureRequest, HttpResponse.BodyHandlers.ofString());
+            assertEquals(400, missingSignatureResponse.statusCode());
+            var missingJson = Json.createReader(new StringReader(missingSignatureResponse.body())).readObject();
+            assertEquals("invalid_request", missingJson.getString("type"));
+            assertEquals("missing_signature", missingJson.getString("code"));
+
+            var signature = SigningTestSupport.hmacSignature(secret, timestamp, SIGNABLE_REQUEST_BODY);
+            var signedRequest = HttpRequest.newBuilder(baseUri.resolve("/agentic_commerce/delegate_payment"))
+                    .header("Authorization", "Bearer test")
+                    .header("API-Version", ApiVersion.SUPPORTED)
+                    .header("Content-Type", "application/json")
+                    .header("Idempotency-Key", "idem-signed-delegate")
+                    .header("Request-Id", "req-signed-delegate")
+                    .header("Timestamp", timestamp)
+                    .header("Signature", "sig:" + signature)
+                    .POST(HttpRequest.BodyPublishers.ofString(SIGNABLE_REQUEST_BODY))
+                    .build();
+            var signedResponse = client.send(signedRequest, HttpResponse.BodyHandlers.ofString());
+            assertEquals(201, signedResponse.statusCode());
+            var responseJson = Json.createReader(new StringReader(signedResponse.body())).readObject();
+            assertTrue(responseJson.containsKey("id"));
+        }
+    }
+
     private static URI serverBaseUri(JettyHttpServer server) {
         return URI.create("https://localhost:" + server.httpsPort());
     }
@@ -198,14 +253,23 @@ final class DelegatePaymentServletTest {
     }
 
     private static JettyHttpServer newServer(TlsConfiguration tlsConfiguration) {
+        return newServer(tlsConfiguration, defaultSecurityConfiguration(), Clock.systemUTC());
+    }
+
+    private static JettyHttpServer newServer(
+            TlsConfiguration tlsConfiguration,
+            SecurityConfiguration securityConfiguration,
+            Clock clock) {
         var checkout = new InMemoryCheckoutSessionService();
         var delegate = new InMemoryDelegatePaymentService();
-        var authenticator = new ConfigurableRequestAuthenticator(
-                new SecurityConfiguration(
-                        Set.of("test"),
-                        Map.<String, SecurityConfiguration.SigningKey>of(),
-                        java.time.Duration.ofMinutes(5)),
-                Clock.systemUTC());
+        var authenticator = new ConfigurableRequestAuthenticator(securityConfiguration, clock);
         return new JettyHttpServer(JettyHttpServer.Configuration.httpsOnly(tlsConfiguration), checkout, delegate, authenticator);
+    }
+
+    private static SecurityConfiguration defaultSecurityConfiguration() {
+        return new SecurityConfiguration(
+                Set.of("test"),
+                Map.of(),
+                java.time.Duration.ofMinutes(5));
     }
 }

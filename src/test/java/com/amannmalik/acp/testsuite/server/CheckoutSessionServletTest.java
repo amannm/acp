@@ -7,6 +7,7 @@ import com.amannmalik.acp.server.JettyHttpServer;
 import com.amannmalik.acp.server.TlsConfiguration;
 import com.amannmalik.acp.server.security.ConfigurableRequestAuthenticator;
 import com.amannmalik.acp.server.security.SecurityConfiguration;
+import com.amannmalik.acp.testutil.SigningTestSupport;
 import com.amannmalik.acp.testutil.TlsTestSupport;
 
 import jakarta.json.Json;
@@ -20,6 +21,9 @@ import java.net.http.HttpClient;
 import java.net.http.HttpRequest;
 import java.net.http.HttpResponse;
 import java.time.Clock;
+import java.time.Instant;
+import java.time.ZoneOffset;
+import java.util.Base64;
 import java.util.Map;
 import java.util.Set;
 
@@ -522,16 +526,73 @@ final class CheckoutSessionServletTest {
         }
     }
 
+    @Test
+    void createRequiresSignatureWhenSigningConfigured() throws Exception {
+        var secret = Base64.getUrlDecoder().decode("c2lnbmVkX3Rlc3Qtc2VjcmV0XzEyMzQ1Njc4OTA");
+        var securityConfiguration = new SecurityConfiguration(
+                Set.of("test"),
+                Map.of("sig", new SecurityConfiguration.SigningKey.HmacSha256(secret)),
+                java.time.Duration.ofMinutes(5));
+        var clock = Clock.fixed(Instant.parse("2025-11-09T12:00:00Z"), ZoneOffset.UTC);
+        try (var tls = TlsTestSupport.createTlsContext();
+                var server = newServer(tls.configuration(), securityConfiguration, clock)) {
+            server.start();
+            var client = HttpClient.newBuilder().sslContext(tls.sslContext()).build();
+            var baseUri = URI.create("https://localhost:" + server.httpsPort());
+            var body = "{\"items\":[{\"id\":\"item_123\",\"quantity\":1}]}";
+            var timestamp = clock.instant().toString();
+
+            var missingSignatureRequest = HttpRequest.newBuilder(baseUri.resolve("/checkout_sessions"))
+                    .header("Authorization", "Bearer test")
+                    .header("API-Version", ApiVersion.SUPPORTED)
+                    .header("Content-Type", "application/json")
+                    .header("Timestamp", timestamp)
+                    .header("Request-Id", "req-missing-signature")
+                    .POST(HttpRequest.BodyPublishers.ofString(body))
+                    .build();
+            var missingSignatureResponse = client.send(missingSignatureRequest, HttpResponse.BodyHandlers.ofString());
+            assertEquals(400, missingSignatureResponse.statusCode());
+            var missingJson = json(missingSignatureResponse.body());
+            assertEquals("invalid_request", missingJson.getString("type"));
+            assertEquals("missing_signature", missingJson.getString("code"));
+
+            var signature = SigningTestSupport.hmacSignature(secret, timestamp, body);
+            var signedRequest = HttpRequest.newBuilder(baseUri.resolve("/checkout_sessions"))
+                    .header("Authorization", "Bearer test")
+                    .header("API-Version", ApiVersion.SUPPORTED)
+                    .header("Content-Type", "application/json")
+                    .header("Timestamp", timestamp)
+                    .header("Signature", "sig:" + signature)
+                    .header("Request-Id", "req-signed-create")
+                    .header("Idempotency-Key", "idem-signed-create")
+                    .POST(HttpRequest.BodyPublishers.ofString(body))
+                    .build();
+            var signedResponse = client.send(signedRequest, HttpResponse.BodyHandlers.ofString());
+            assertEquals(201, signedResponse.statusCode());
+            var sessionJson = json(signedResponse.body());
+            assertTrue(sessionJson.containsKey("id"));
+        }
+    }
+
     private static JettyHttpServer newServer(TlsConfiguration tlsConfiguration) {
+        return newServer(tlsConfiguration, defaultSecurityConfiguration(), Clock.systemUTC());
+    }
+
+    private static JettyHttpServer newServer(
+            TlsConfiguration tlsConfiguration,
+            SecurityConfiguration securityConfiguration,
+            Clock clock) {
         var checkout = new InMemoryCheckoutSessionService();
         var delegate = new InMemoryDelegatePaymentService();
-        var authenticator = new ConfigurableRequestAuthenticator(
-                new SecurityConfiguration(
-                        Set.of("test"),
-                        Map.<String, SecurityConfiguration.SigningKey>of(),
-                        java.time.Duration.ofMinutes(5)),
-                Clock.systemUTC());
+        var authenticator = new ConfigurableRequestAuthenticator(securityConfiguration, clock);
         return new JettyHttpServer(JettyHttpServer.Configuration.httpsOnly(tlsConfiguration), checkout, delegate, authenticator);
+    }
+
+    private static SecurityConfiguration defaultSecurityConfiguration() {
+        return new SecurityConfiguration(
+                Set.of("test"),
+                Map.of(),
+                java.time.Duration.ofMinutes(5));
     }
 
     private static HttpResponse<String> sendCreateRequest(
