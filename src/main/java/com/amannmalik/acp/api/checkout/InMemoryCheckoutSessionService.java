@@ -62,6 +62,14 @@ public final class InMemoryCheckoutSessionService implements CheckoutSessionServ
         this(defaultPriceBook(), Clock.systemUTC(), new CurrencyCode("usd"), webhookPublisher);
     }
 
+    public InMemoryCheckoutSessionService(CurrencyCode currency) {
+        this(defaultPriceBook(), Clock.systemUTC(), currency);
+    }
+
+    public InMemoryCheckoutSessionService(CurrencyCode currency, OrderWebhookPublisher webhookPublisher) {
+        this(defaultPriceBook(), Clock.systemUTC(), currency, webhookPublisher);
+    }
+
     private static List<Item> extractItems(CheckoutSession session) {
         return session.lineItems().stream().map(LineItem::item).collect(Collectors.toUnmodifiableList());
     }

@@ -40,6 +40,11 @@ public final class ServeCommand implements Callable<Integer> {
             description = "Static price override(s) in the form item_id=amount_minor_units")
     List<String> priceOverrides;
     @CommandLine.Option(
+            names = "--currency",
+            defaultValue = "usd",
+            description = "ISO-4217 currency code for checkout sessions (default: ${DEFAULT-VALUE})")
+    String currencyCode;
+    @CommandLine.Option(
             names = "--auth-token",
             required = true,
             description = "Allowed bearer token(s). Repeat to configure multiple tokens.")
@@ -90,9 +95,10 @@ public final class ServeCommand implements Callable<Integer> {
     public Integer call() throws Exception {
         var priceBook = parsePriceOverrides();
         var orderPublisher = webhookPublisher();
+        var currency = new CurrencyCode(currencyCode);
         var checkoutService = priceBook.isEmpty()
-                ? new InMemoryCheckoutSessionService(orderPublisher)
-                : new InMemoryCheckoutSessionService(priceBook, Clock.systemUTC(), new CurrencyCode("usd"), orderPublisher);
+                ? new InMemoryCheckoutSessionService(currency, orderPublisher)
+                : new InMemoryCheckoutSessionService(priceBook, Clock.systemUTC(), currency, orderPublisher);
         var delegatePaymentService = new InMemoryDelegatePaymentService();
         var authenticator = authenticator();
         var serverConfig = serverConfiguration();

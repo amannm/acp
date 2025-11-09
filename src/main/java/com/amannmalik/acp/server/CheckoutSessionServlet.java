@@ -209,7 +209,7 @@ public final class CheckoutSessionServlet extends HttpServlet {
             sendError(
                     resp,
                     HttpServletResponse.SC_CONFLICT,
-                    ErrorResponse.ErrorType.REQUEST_NOT_IDEMPOTENT,
+                    ErrorResponse.ErrorType.INVALID_REQUEST,
                     "idempotency_conflict",
                     e.getMessage(),
                     null,

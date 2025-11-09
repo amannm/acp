@@ -104,7 +104,7 @@ final class CheckoutSessionServletTest {
 
             assertEquals(409, second.statusCode());
             var errorJson = Json.createReader(new StringReader(second.body())).readObject();
-            assertEquals("request_not_idempotent", errorJson.getString("type"));
+            assertEquals("invalid_request", errorJson.getString("type"));
             assertEquals("idempotency_conflict", errorJson.getString("code"));
         }
     }
@@ -230,7 +230,7 @@ final class CheckoutSessionServletTest {
 
             assertEquals(409, second.statusCode());
             var errorJson = json(second.body());
-            assertEquals("request_not_idempotent", errorJson.getString("type"));
+            assertEquals("invalid_request", errorJson.getString("type"));
             assertEquals("idempotency_conflict", errorJson.getString("code"));
         }
     }

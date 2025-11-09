@@ -135,6 +135,19 @@ final class InMemoryCheckoutSessionServiceTest {
         assertEquals(400, exception.status());
     }
 
+    @Test
+    void createUsesConfiguredCurrency() {
+        var eurService = new InMemoryCheckoutSessionService(
+                Map.of("item_123", 1500L),
+                FIXED_CLOCK,
+                new CurrencyCode("eur"),
+                webhookPublisher);
+
+        var session = eurService.create(createRequest(), null);
+
+        assertEquals("eur", session.currency().value());
+    }
+
     private CheckoutSessionCreateRequest createRequest() {
         return new CheckoutSessionCreateRequest(
                 List.of(new Item("item_123", 1)),
