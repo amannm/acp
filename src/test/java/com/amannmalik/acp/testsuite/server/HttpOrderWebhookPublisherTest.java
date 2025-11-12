@@ -4,39 +4,38 @@ import com.amannmalik.acp.api.shared.MinorUnitAmount;
 import com.amannmalik.acp.server.webhook.HttpOrderWebhookPublisher;
 import com.amannmalik.acp.spi.webhook.OrderWebhookEvent;
 import com.amannmalik.acp.spi.webhook.OrderWebhookPublisher;
-
 import jakarta.json.Json;
-
 import org.junit.jupiter.api.Test;
 
-import java.io.IOException;
+import javax.crypto.Mac;
+import javax.crypto.spec.SecretKeySpec;
+import javax.net.ssl.*;
 import java.io.StringReader;
-import java.net.URI;
-import java.net.http.HttpClient;
-import java.net.http.HttpHeaders;
-import java.net.http.HttpRequest;
-import java.net.http.HttpResponse;
+import java.net.*;
+import java.net.http.*;
 import java.net.http.HttpResponse.BodyHandler;
 import java.nio.ByteBuffer;
 import java.nio.charset.StandardCharsets;
-import java.time.Clock;
-import java.time.Instant;
-import java.time.ZoneOffset;
-import java.util.Base64;
-import java.util.List;
-import java.util.Optional;
-import java.util.concurrent.CountDownLatch;
-import java.util.concurrent.Flow;
+import java.security.NoSuchAlgorithmException;
+import java.time.*;
+import java.util.*;
+import java.util.concurrent.*;
 
-import javax.net.ssl.SSLSession;
-
-import static org.junit.jupiter.api.Assertions.assertEquals;
-import static org.junit.jupiter.api.Assertions.assertFalse;
-import static org.junit.jupiter.api.Assertions.assertNotNull;
-import static org.junit.jupiter.api.Assertions.assertThrows;
+import static org.junit.jupiter.api.Assertions.*;
 
 final class HttpOrderWebhookPublisherTest {
     private static final byte[] SECRET = Base64.getUrlDecoder().decode("c2VjcmV0X3Rlc3Rfc2VjcmV0MTIzNDU2");
+
+    private static String expectedSignature(String payload) {
+        try {
+            var mac = Mac.getInstance("HmacSHA256");
+            mac.init(new SecretKeySpec(SECRET, "HmacSHA256"));
+            var signature = mac.doFinal(payload.getBytes(StandardCharsets.UTF_8));
+            return Base64.getUrlEncoder().withoutPadding().encodeToString(signature);
+        } catch (Exception e) {
+            throw new IllegalStateException("Unable to compute expected signature", e);
+        }
+    }
 
     @Test
     void publishSerializesOrderUpdateWithRefunds() {
@@ -111,9 +110,9 @@ final class HttpOrderWebhookPublisherTest {
     }
 
     private static final class RecordingHttpClient extends HttpClient {
+        private final int statusCode;
         private HttpRequest recordedRequest;
         private String recordedBody;
-        private final int statusCode;
 
         private RecordingHttpClient() {
             this(200);
@@ -124,12 +123,12 @@ final class HttpOrderWebhookPublisherTest {
         }
 
         @Override
-        public Optional<java.net.CookieHandler> cookieHandler() {
+        public Optional<CookieHandler> cookieHandler() {
             return Optional.empty();
         }
 
         @Override
-        public Optional<java.time.Duration> connectTimeout() {
+        public Optional<Duration> connectTimeout() {
             return Optional.empty();
         }
 
@@ -139,26 +138,26 @@ final class HttpOrderWebhookPublisherTest {
         }
 
         @Override
-        public Optional<java.net.ProxySelector> proxy() {
+        public Optional<ProxySelector> proxy() {
             return Optional.empty();
         }
 
         @Override
-        public javax.net.ssl.SSLContext sslContext() {
+        public SSLContext sslContext() {
             try {
-                return javax.net.ssl.SSLContext.getDefault();
-            } catch (java.security.NoSuchAlgorithmException e) {
+                return SSLContext.getDefault();
+            } catch (NoSuchAlgorithmException e) {
                 throw new IllegalStateException(e);
             }
         }
 
         @Override
-        public javax.net.ssl.SSLParameters sslParameters() {
+        public SSLParameters sslParameters() {
             return sslContext().getDefaultSSLParameters();
         }
 
         @Override
-        public Optional<java.net.Authenticator> authenticator() {
+        public Optional<Authenticator> authenticator() {
             return Optional.empty();
         }
 
@@ -168,13 +167,13 @@ final class HttpOrderWebhookPublisherTest {
         }
 
         @Override
-        public Optional<java.util.concurrent.Executor> executor() {
+        public Optional<Executor> executor() {
             return Optional.empty();
         }
 
         @Override
         public <T> HttpResponse<T> send(HttpRequest request, BodyHandler<T> responseBodyHandler)
-                throws IOException, InterruptedException {
+                throws InterruptedException {
             this.recordedRequest = request;
             this.recordedBody = readBody(request.bodyPublisher().orElseThrow());
             var subscriber = responseBodyHandler.apply(new ResponseInfoImpl(statusCode));
@@ -185,17 +184,17 @@ final class HttpOrderWebhookPublisherTest {
         }
 
         @Override
-        public <T> java.util.concurrent.CompletableFuture<HttpResponse<T>> sendAsync(
+        public <T> CompletableFuture<HttpResponse<T>> sendAsync(
                 HttpRequest request, BodyHandler<T> responseBodyHandler) {
-            return java.util.concurrent.CompletableFuture.failedFuture(new UnsupportedOperationException("sendAsync"));
+            return CompletableFuture.failedFuture(new UnsupportedOperationException("sendAsync"));
         }
 
         @Override
-        public <T> java.util.concurrent.CompletableFuture<HttpResponse<T>> sendAsync(
+        public <T> CompletableFuture<HttpResponse<T>> sendAsync(
                 HttpRequest request,
                 BodyHandler<T> responseBodyHandler,
                 HttpResponse.PushPromiseHandler<T> pushPromiseHandler) {
-            return java.util.concurrent.CompletableFuture.failedFuture(new UnsupportedOperationException("sendAsync"));
+            return CompletableFuture.failedFuture(new UnsupportedOperationException("sendAsync"));
         }
 
         private String readBody(HttpRequest.BodyPublisher publisher) throws InterruptedException {
@@ -234,25 +233,15 @@ final class HttpOrderWebhookPublisherTest {
         }
     }
 
-    private static final class ResponseInfoImpl implements HttpResponse.ResponseInfo {
-        private final int statusCode;
-
-        private ResponseInfoImpl(int statusCode) {
-            this.statusCode = statusCode;
-        }
-
-        @Override
-        public int statusCode() {
-            return statusCode;
-        }
+    private record ResponseInfoImpl(int statusCode) implements HttpResponse.ResponseInfo {
 
         @Override
         public HttpHeaders headers() {
-            return HttpHeaders.of(java.util.Map.of(), (a, b) -> true);
+            return HttpHeaders.of(Map.of(), (a, b) -> true);
         }
 
         @Override
-        public java.net.http.HttpClient.Version version() {
+        public HttpClient.Version version() {
             return HttpClient.Version.HTTP_1_1;
         }
     }
@@ -267,24 +256,7 @@ final class HttpOrderWebhookPublisherTest {
         }
     }
 
-    private static final class SimpleHttpResponse<T> implements HttpResponse<T> {
-        private final HttpRequest request;
-        private final int statusCode;
-
-        private SimpleHttpResponse(HttpRequest request, int statusCode) {
-            this.request = request;
-            this.statusCode = statusCode;
-        }
-
-        @Override
-        public int statusCode() {
-            return statusCode;
-        }
-
-        @Override
-        public HttpRequest request() {
-            return request;
-        }
+    private record SimpleHttpResponse<T>(HttpRequest request, int statusCode) implements HttpResponse<T> {
 
         @Override
         public Optional<HttpResponse<T>> previousResponse() {
@@ -293,7 +265,7 @@ final class HttpOrderWebhookPublisherTest {
 
         @Override
         public HttpHeaders headers() {
-            return HttpHeaders.of(java.util.Map.of(), (a, b) -> true);
+            return HttpHeaders.of(Map.of(), (a, b) -> true);
         }
 
         @Override
@@ -314,17 +286,6 @@ final class HttpOrderWebhookPublisherTest {
         @Override
         public HttpClient.Version version() {
             return HttpClient.Version.HTTP_1_1;
-        }
-    }
-
-    private static String expectedSignature(String payload) {
-        try {
-            var mac = javax.crypto.Mac.getInstance("HmacSHA256");
-            mac.init(new javax.crypto.spec.SecretKeySpec(SECRET, "HmacSHA256"));
-            var signature = mac.doFinal(payload.getBytes(StandardCharsets.UTF_8));
-            return Base64.getUrlEncoder().withoutPadding().encodeToString(signature);
-        } catch (Exception e) {
-            throw new IllegalStateException("Unable to compute expected signature", e);
         }
     }
 }

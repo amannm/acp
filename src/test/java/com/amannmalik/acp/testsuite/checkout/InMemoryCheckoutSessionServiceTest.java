@@ -2,31 +2,16 @@ package com.amannmalik.acp.testsuite.checkout;
 
 import com.amannmalik.acp.api.checkout.CheckoutSessionIdempotencyConflictException;
 import com.amannmalik.acp.api.checkout.InMemoryCheckoutSessionService;
-import com.amannmalik.acp.api.checkout.model.CheckoutSessionCompleteRequest;
-import com.amannmalik.acp.api.checkout.model.CheckoutSessionCreateRequest;
-import com.amannmalik.acp.api.checkout.model.CheckoutSessionStatus;
-import com.amannmalik.acp.api.checkout.model.CheckoutSessionUpdateRequest;
-import com.amannmalik.acp.api.checkout.model.Item;
-import com.amannmalik.acp.api.checkout.model.PaymentData;
-import com.amannmalik.acp.api.checkout.model.PaymentProvider;
+import com.amannmalik.acp.api.checkout.model.*;
 import com.amannmalik.acp.api.shared.CurrencyCode;
 import com.amannmalik.acp.spi.webhook.OrderWebhookEvent;
 import com.amannmalik.acp.spi.webhook.OrderWebhookPublisher;
-
 import org.junit.jupiter.api.Test;
 
-import java.time.Clock;
-import java.time.Instant;
-import java.time.ZoneOffset;
-import java.util.ArrayList;
-import java.util.List;
-import java.util.Map;
+import java.time.*;
+import java.util.*;
 
-import static org.junit.jupiter.api.Assertions.assertEquals;
-import static org.junit.jupiter.api.Assertions.assertNotEquals;
-import static org.junit.jupiter.api.Assertions.assertNotNull;
-import static org.junit.jupiter.api.Assertions.assertThrows;
-import static org.junit.jupiter.api.Assertions.assertTrue;
+import static org.junit.jupiter.api.Assertions.*;
 
 final class InMemoryCheckoutSessionServiceTest {
     private static final Clock FIXED_CLOCK = Clock.fixed(Instant.parse("2025-10-25T10:00:00Z"), ZoneOffset.UTC);
@@ -44,14 +29,14 @@ final class InMemoryCheckoutSessionServiceTest {
         assertEquals(CheckoutSessionStatus.NOT_READY_FOR_PAYMENT, session.status());
         assertEquals("usd", session.currency().value());
         assertEquals(1, session.lineItems().size());
-        var lineItem = session.lineItems().get(0);
+        var lineItem = session.lineItems().getFirst();
         assertEquals(2, lineItem.item().quantity());
         assertEquals(2400L, lineItem.baseAmount().value());
         assertEquals(0L, lineItem.discount().value());
         assertNotNull(session.fulfillmentOptionId());
         assertEquals(6, session.totals().size());
         assertEquals(1, session.messages().size());
-        assertTrue(session.messages().get(0) instanceof com.amannmalik.acp.api.checkout.model.Message.Info info
+        assertTrue(session.messages().getFirst() instanceof Message.Info info
                 && "$.fulfillment_address".equals(info.param()));
     }
 
@@ -75,7 +60,7 @@ final class InMemoryCheckoutSessionServiceTest {
                 Map.of("item_test", 1200L), FIXED_CLOCK, new CurrencyCode("usd"), publisher);
 
         var session = service.create(new CheckoutSessionCreateRequest(List.of(new Item("item_test", 1)), null, null), null);
-        var address = new com.amannmalik.acp.api.checkout.model.Address(
+        var address = new Address(
                 "Test Buyer",
                 "123 Test Street",
                 "Apt 1",
@@ -92,7 +77,7 @@ final class InMemoryCheckoutSessionServiceTest {
 
         assertEquals(2, events.size());
 
-        var createEvent = events.get(0);
+        var createEvent = events.getFirst();
         assertEquals(OrderWebhookEvent.Type.ORDER_CREATE, createEvent.type());
         assertEquals(session.id().value(), createEvent.checkoutSessionId());
         assertEquals(OrderWebhookEvent.OrderStatus.CREATED, createEvent.status());

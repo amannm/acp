@@ -1,21 +1,14 @@
 package com.amannmalik.acp.testsuite.codec;
 
 import com.amannmalik.acp.api.checkout.model.Address;
-import com.amannmalik.acp.api.delegatepayment.model.Allowance;
-import com.amannmalik.acp.api.delegatepayment.model.DelegatePaymentRequest;
-import com.amannmalik.acp.api.delegatepayment.model.PaymentMethodCard;
-import com.amannmalik.acp.api.delegatepayment.model.RiskSignal;
+import com.amannmalik.acp.api.delegatepayment.model.*;
 import com.amannmalik.acp.api.shared.CurrencyCode;
 import com.amannmalik.acp.codec.DelegatePaymentJsonCodec;
-import jakarta.json.Json;
-import jakarta.json.JsonObject;
-import jakarta.json.JsonString;
+import jakarta.json.*;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.Test;
 
-import java.io.ByteArrayInputStream;
-import java.io.ByteArrayOutputStream;
-import java.io.InputStream;
+import java.io.*;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
@@ -26,7 +19,6 @@ import java.util.stream.Collectors;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
-import static org.junit.jupiter.api.Assertions.assertNull;
 
 final class DelegatePaymentJsonCodecExamplesTest {
     private static JsonObject examples;
@@ -37,6 +29,15 @@ final class DelegatePaymentJsonCodecExamplesTest {
         try (var reader = Json.createReader(Files.newInputStream(examplePath("examples.delegate_payment.json")))) {
             examples = reader.readObject();
         }
+    }
+
+    private static Path examplePath(String filename) {
+        return Path.of("specification", "2025-09-29", "examples", filename);
+    }
+
+    private static InputStream asStream(JsonObject value) {
+        byte[] bytes = value.toString().getBytes(StandardCharsets.UTF_8);
+        return new ByteArrayInputStream(bytes);
     }
 
     @Test
@@ -74,19 +75,19 @@ final class DelegatePaymentJsonCodecExamplesTest {
         assertEquals("94131", address.postalCode());
         List<RiskSignal> riskSignals = request.riskSignals();
         assertEquals(1, riskSignals.size());
-        assertEquals(RiskSignal.Type.CARD_TESTING, riskSignals.get(0).type());
-        assertEquals(10, riskSignals.get(0).score());
-        assertEquals(RiskSignal.Action.MANUAL_REVIEW, riskSignals.get(0).action());
+        assertEquals(RiskSignal.Type.CARD_TESTING, riskSignals.getFirst().type());
+        assertEquals(10, riskSignals.getFirst().score());
+        assertEquals(RiskSignal.Action.MANUAL_REVIEW, riskSignals.getFirst().action());
         Map<String, String> metadata = request.metadata();
         assertEquals("q4", metadata.get("campaign"));
         assertEquals("chatgpt_checkout", metadata.get("source"));
     }
 
     @Test
-    void responseRoundTripsSpecExample() throws Exception {
+    void responseRoundTripsSpecExample() {
         var responseJson = examples.getJsonObject("delegate_payment_success_response");
 
-        var response = new com.amannmalik.acp.api.delegatepayment.model.DelegatePaymentResponse(
+        var response = new DelegatePaymentResponse(
                 responseJson.getString("id"),
                 Instant.parse(responseJson.getString("created")),
                 responseJson.getJsonObject("metadata").entrySet().stream()
@@ -99,14 +100,5 @@ final class DelegatePaymentJsonCodecExamplesTest {
         var actual = Json.createReader(new ByteArrayInputStream(output.toByteArray())).readObject();
 
         assertEquals(responseJson, actual);
-    }
-
-    private static Path examplePath(String filename) {
-        return Path.of("specification", "2025-09-29", "examples", filename);
-    }
-
-    private static InputStream asStream(JsonObject value) {
-        byte[] bytes = value.toString().getBytes(StandardCharsets.UTF_8);
-        return new ByteArrayInputStream(bytes);
     }
 }

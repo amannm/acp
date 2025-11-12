@@ -9,12 +9,12 @@ public record CheckoutSessionId(String value) {
         }
     }
 
+    public static CheckoutSessionId from(final String raw) {
+        return new CheckoutSessionId(Objects.requireNonNull(raw, "raw"));
+    }
+
     @Override
     public String toString() {
         return value;
-    }
-
-    public static CheckoutSessionId from(final String raw) {
-        return new CheckoutSessionId(Objects.requireNonNull(raw, "raw"));
     }
 }

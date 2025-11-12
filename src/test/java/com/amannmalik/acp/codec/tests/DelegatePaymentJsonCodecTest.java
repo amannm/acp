@@ -1,11 +1,10 @@
 package com.amannmalik.acp.codec.tests;
 
-import com.amannmalik.acp.codec.DelegatePaymentJsonCodec;
 import com.amannmalik.acp.api.delegatepayment.model.DelegatePaymentRequest;
-import org.junit.jupiter.api.Test;
-
+import com.amannmalik.acp.codec.DelegatePaymentJsonCodec;
 import jakarta.json.Json;
 import jakarta.json.JsonObject;
+import org.junit.jupiter.api.Test;
 
 import java.io.*;
 import java.nio.charset.StandardCharsets;
@@ -15,6 +14,16 @@ import java.nio.file.Path;
 import static org.junit.jupiter.api.Assertions.*;
 
 final class DelegatePaymentJsonCodecTest {
+    private static InputStream jsonBytes(JsonObject object) {
+        return new ByteArrayInputStream(object.toString().getBytes(StandardCharsets.UTF_8));
+    }
+
+    private static JsonObject readExamples(String path) throws IOException {
+        try (var reader = Json.createReader(Files.newBufferedReader(Path.of(path)))) {
+            return reader.readObject();
+        }
+    }
+
     @Test
     void readRequest_allowsBlankBillingAddressLineTwo() throws Exception {
         var examples = readExamples("specification/2025-09-29/examples/examples.delegate_payment.json");
@@ -76,15 +85,5 @@ final class DelegatePaymentJsonCodecTest {
         var request = codec.readRequest(jsonBytes(requestWithoutState));
         assertNotNull(request.billingAddress());
         assertNull(request.billingAddress().state());
-    }
-
-    private static InputStream jsonBytes(JsonObject object) {
-        return new ByteArrayInputStream(object.toString().getBytes(StandardCharsets.UTF_8));
-    }
-
-    private static JsonObject readExamples(String path) throws IOException {
-        try (var reader = Json.createReader(Files.newBufferedReader(Path.of(path)))) {
-            return reader.readObject();
-        }
     }
 }

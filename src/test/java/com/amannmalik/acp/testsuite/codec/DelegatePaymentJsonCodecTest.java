@@ -1,13 +1,14 @@
 package com.amannmalik.acp.testsuite.codec;
 
-import static org.junit.jupiter.api.Assertions.assertEquals;
-import static org.junit.jupiter.api.Assertions.assertNotNull;
-
 import com.amannmalik.acp.api.delegatepayment.model.DelegatePaymentRequest;
 import com.amannmalik.acp.codec.DelegatePaymentJsonCodec;
+import org.junit.jupiter.api.Test;
+
 import java.io.ByteArrayInputStream;
 import java.nio.charset.StandardCharsets;
-import org.junit.jupiter.api.Test;
+
+import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertNotNull;
 
 final class DelegatePaymentJsonCodecTest {
     @Test

@@ -5,8 +5,6 @@ module acp.main {
     requires transitive java.net.http;
     requires org.eclipse.jetty.ee10.servlet;
     requires org.eclipse.jetty.server;
-    requires org.bouncycastle.provider;
-    requires org.bouncycastle.pkix;
     exports com.amannmalik.acp.cli;
     exports com.amannmalik.acp.api.checkout;
     exports com.amannmalik.acp.api.checkout.model;

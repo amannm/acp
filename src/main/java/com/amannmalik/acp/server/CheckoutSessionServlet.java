@@ -7,9 +7,9 @@ import com.amannmalik.acp.api.shared.ErrorResponse;
 import com.amannmalik.acp.codec.CheckoutSessionJsonCodec;
 import com.amannmalik.acp.codec.JsonDecodingException;
 import com.amannmalik.acp.server.security.RequestAuthenticator;
-import jakarta.servlet.ServletException;
 import jakarta.servlet.http.*;
 
+import java.io.ByteArrayInputStream;
 import java.io.IOException;
 import java.util.*;
 
@@ -63,7 +63,7 @@ public final class CheckoutSessionServlet extends HttpServlet {
     }
 
     @Override
-    protected void doPost(HttpServletRequest req, HttpServletResponse resp) throws ServletException, IOException {
+    protected void doPost(HttpServletRequest req, HttpServletResponse resp) throws IOException {
         handleWithErrors(req, resp, () -> {
             validateHeaders(req);
             var segments = pathSegments(req);
@@ -71,7 +71,7 @@ public final class CheckoutSessionServlet extends HttpServlet {
                 var body = readBody(req);
                 authenticator.authenticate(req, body);
                 requireJsonPayload(req);
-                var request = codec.readCreateRequest(new java.io.ByteArrayInputStream(body));
+                var request = codec.readCreateRequest(new ByteArrayInputStream(body));
                 var session = service.create(request, normalizeHeader(req.getHeader("Idempotency-Key")));
                 resp.setStatus(HttpServletResponse.SC_CREATED);
                 propagateCorrelationHeaders(req, resp);
@@ -84,7 +84,7 @@ public final class CheckoutSessionServlet extends HttpServlet {
                 var body = readBody(req);
                 authenticator.authenticate(req, body);
                 requireJsonPayload(req);
-                var request = codec.readUpdateRequest(new java.io.ByteArrayInputStream(body));
+                var request = codec.readUpdateRequest(new ByteArrayInputStream(body));
                 var session = service.update(sessionId, request);
                 resp.setStatus(HttpServletResponse.SC_OK);
                 propagateCorrelationHeaders(req, resp);
@@ -97,7 +97,7 @@ public final class CheckoutSessionServlet extends HttpServlet {
                 var body = readBody(req);
                 authenticator.authenticate(req, body);
                 requireJsonPayload(req);
-                var request = codec.readCompleteRequest(new java.io.ByteArrayInputStream(body));
+                var request = codec.readCompleteRequest(new ByteArrayInputStream(body));
                 var idempotencyKey = ensureIdempotencyKey(req);
                 var session = service.complete(sessionId, request, idempotencyKey);
                 resp.setStatus(HttpServletResponse.SC_OK);
@@ -121,7 +121,7 @@ public final class CheckoutSessionServlet extends HttpServlet {
     }
 
     @Override
-    protected void doGet(HttpServletRequest req, HttpServletResponse resp) throws ServletException, IOException {
+    protected void doGet(HttpServletRequest req, HttpServletResponse resp) throws IOException {
         handleWithErrors(req, resp, () -> {
             validateHeaders(req);
             var body = readBody(req);
@@ -131,7 +131,7 @@ public final class CheckoutSessionServlet extends HttpServlet {
                 resp.setStatus(HttpServletResponse.SC_NOT_FOUND);
                 return;
             }
-            var session = service.retrieve(new CheckoutSessionId(segments.get(0)));
+            var session = service.retrieve(new CheckoutSessionId(segments.getFirst()));
             resp.setStatus(HttpServletResponse.SC_OK);
             propagateCorrelationHeaders(req, resp);
             resp.setContentType(APPLICATION_JSON);

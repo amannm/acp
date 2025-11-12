@@ -1,16 +1,14 @@
 package com.amannmalik.acp.cli;
 
 import picocli.CommandLine;
-import picocli.CommandLine.Command;
-import picocli.CommandLine.IVersionProvider;
+import picocli.CommandLine.*;
 import picocli.CommandLine.Model.CommandSpec;
-import picocli.CommandLine.Spec;
 
 public final class Entrypoint {
     private Entrypoint() {
     }
 
-    public static void main(String[] args) {
+    static void main(String[] args) {
         System.exit(commandLine().execute(args));
     }
 
@@ -48,7 +46,7 @@ public final class Entrypoint {
             if (version == null || version.isBlank()) {
                 version = "development";
             }
-            return new String[] {"acp " + version};
+            return new String[]{"acp " + version};
         }
     }
 }

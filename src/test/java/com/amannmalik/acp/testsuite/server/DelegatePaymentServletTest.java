@@ -4,27 +4,19 @@ import com.amannmalik.acp.api.checkout.InMemoryCheckoutSessionService;
 import com.amannmalik.acp.api.delegatepayment.InMemoryDelegatePaymentService;
 import com.amannmalik.acp.api.shared.ApiVersion;
 import com.amannmalik.acp.server.JettyHttpServer;
+import com.amannmalik.acp.server.TlsConfiguration;
 import com.amannmalik.acp.server.security.ConfigurableRequestAuthenticator;
 import com.amannmalik.acp.server.security.SecurityConfiguration;
-import com.amannmalik.acp.server.TlsConfiguration;
 import com.amannmalik.acp.testutil.SigningTestSupport;
 import com.amannmalik.acp.testutil.TlsTestSupport;
-
 import jakarta.json.Json;
-
 import org.junit.jupiter.api.Test;
 
 import java.io.StringReader;
 import java.net.URI;
-import java.net.http.HttpClient;
-import java.net.http.HttpRequest;
-import java.net.http.HttpResponse;
-import java.time.Clock;
-import java.time.Instant;
-import java.time.ZoneOffset;
-import java.util.Base64;
-import java.util.Map;
-import java.util.Set;
+import java.net.http.*;
+import java.time.*;
+import java.util.*;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertTrue;
@@ -70,10 +62,48 @@ final class DelegatePaymentServletTest {
     private static final String SIGNABLE_REQUEST_BODY =
             "{\"allowance\":{\"checkout_session_id\":\"csn_sig\",\"currency\":\"usd\",\"expires_at\":\"2030-01-01T00:00:00Z\",\"max_amount\":2000,\"merchant_id\":\"acme\",\"reason\":\"one_time\"},\"metadata\":{\"source\":\"test\"},\"payment_method\":{\"card_number_type\":\"fpan\",\"display_card_funding_type\":\"credit\",\"metadata\":{\"issuer\":\"demo\"},\"number\":\"4242424242424242\",\"type\":\"card\",\"virtual\":false},\"risk_signals\":[{\"action\":\"authorized\",\"score\":1,\"type\":\"card_testing\"}]}";
 
+    private static URI serverBaseUri(JettyHttpServer server) {
+        return URI.create("https://localhost:" + server.httpsPort());
+    }
+
+    private static HttpResponse<String> sendDelegatePaymentRequest(HttpClient client, URI baseUri, String idemKey, String body)
+            throws Exception {
+        var request = HttpRequest.newBuilder(baseUri.resolve("/agentic_commerce/delegate_payment"))
+                .header("Authorization", "Bearer test")
+                .header("API-Version", ApiVersion.SUPPORTED)
+                .header("Content-Type", "application/json")
+                .header("Idempotency-Key", idemKey)
+                .header("Request-Id", "req-" + idemKey)
+                .POST(HttpRequest.BodyPublishers.ofString(body))
+                .build();
+        return client.send(request, HttpResponse.BodyHandlers.ofString());
+    }
+
+    private static JettyHttpServer newServer(TlsConfiguration tlsConfiguration) {
+        return newServer(tlsConfiguration, defaultSecurityConfiguration(), Clock.systemUTC());
+    }
+
+    private static JettyHttpServer newServer(
+            TlsConfiguration tlsConfiguration,
+            SecurityConfiguration securityConfiguration,
+            Clock clock) {
+        var checkout = new InMemoryCheckoutSessionService();
+        var delegate = new InMemoryDelegatePaymentService();
+        var authenticator = new ConfigurableRequestAuthenticator(securityConfiguration, clock);
+        return new JettyHttpServer(JettyHttpServer.Configuration.httpsOnly(tlsConfiguration), checkout, delegate, authenticator);
+    }
+
+    private static SecurityConfiguration defaultSecurityConfiguration() {
+        return new SecurityConfiguration(
+                Set.of("test"),
+                Map.of(),
+                Duration.ofMinutes(5));
+    }
+
     @Test
     void createDelegatePaymentToken() throws Exception {
         try (var tls = TlsTestSupport.createTlsContext();
-                var server = newServer(tls.configuration())) {
+             var server = newServer(tls.configuration())) {
             server.start();
             var client = HttpClient.newBuilder().sslContext(tls.sslContext()).build();
             var response = sendDelegatePaymentRequest(client, serverBaseUri(server), "idem_create", VALID_REQUEST_BODY);
@@ -90,7 +120,7 @@ final class DelegatePaymentServletTest {
     @Test
     void idempotencyConflictReturns409() throws Exception {
         try (var tls = TlsTestSupport.createTlsContext();
-                var server = newServer(tls.configuration())) {
+             var server = newServer(tls.configuration())) {
             server.start();
             var client = HttpClient.newBuilder().sslContext(tls.sslContext()).build();
             var baseBody = VALID_REQUEST_BODY;
@@ -111,7 +141,7 @@ final class DelegatePaymentServletTest {
     @Test
     void expiredAllowanceReturns422() throws Exception {
         try (var tls = TlsTestSupport.createTlsContext();
-                var server = newServer(tls.configuration())) {
+             var server = newServer(tls.configuration())) {
             server.start();
             var client = HttpClient.newBuilder().sslContext(tls.sslContext()).build();
             var expiredBody = VALID_REQUEST_BODY.replace("2030-01-01T00:00:00Z", "2020-01-01T00:00:00Z");
@@ -128,7 +158,7 @@ final class DelegatePaymentServletTest {
     @Test
     void zeroMaxAmountReturns422() throws Exception {
         try (var tls = TlsTestSupport.createTlsContext();
-                var server = newServer(tls.configuration())) {
+             var server = newServer(tls.configuration())) {
             server.start();
             var client = HttpClient.newBuilder().sslContext(tls.sslContext()).build();
             var body = VALID_REQUEST_BODY.replace("\"max_amount\": 2000", "\"max_amount\": 0");
@@ -146,7 +176,7 @@ final class DelegatePaymentServletTest {
     @Test
     void missingAuthorizationReturns401() throws Exception {
         try (var tls = TlsTestSupport.createTlsContext();
-                var server = newServer(tls.configuration())) {
+             var server = newServer(tls.configuration())) {
             server.start();
             var client = HttpClient.newBuilder().sslContext(tls.sslContext()).build();
             var request = HttpRequest.newBuilder(serverBaseUri(server).resolve("/agentic_commerce/delegate_payment"))
@@ -168,7 +198,7 @@ final class DelegatePaymentServletTest {
     @Test
     void merchantIdLongerThan256Returns400() throws Exception {
         try (var tls = TlsTestSupport.createTlsContext();
-                var server = newServer(tls.configuration())) {
+             var server = newServer(tls.configuration())) {
             server.start();
             var client = HttpClient.newBuilder().sslContext(tls.sslContext()).build();
             var longMerchant = "m".repeat(257);
@@ -193,10 +223,10 @@ final class DelegatePaymentServletTest {
         var securityConfiguration = new SecurityConfiguration(
                 Set.of("test"),
                 Map.of("sig", new SecurityConfiguration.SigningKey.HmacSha256(secret)),
-                java.time.Duration.ofMinutes(5));
+                Duration.ofMinutes(5));
         var clock = Clock.fixed(Instant.parse("2025-11-09T12:00:00Z"), ZoneOffset.UTC);
         try (var tls = TlsTestSupport.createTlsContext();
-                var server = newServer(tls.configuration(), securityConfiguration, clock)) {
+             var server = newServer(tls.configuration(), securityConfiguration, clock)) {
             server.start();
             var client = HttpClient.newBuilder().sslContext(tls.sslContext()).build();
             var baseUri = serverBaseUri(server);
@@ -233,43 +263,5 @@ final class DelegatePaymentServletTest {
             var responseJson = Json.createReader(new StringReader(signedResponse.body())).readObject();
             assertTrue(responseJson.containsKey("id"));
         }
-    }
-
-    private static URI serverBaseUri(JettyHttpServer server) {
-        return URI.create("https://localhost:" + server.httpsPort());
-    }
-
-    private static HttpResponse<String> sendDelegatePaymentRequest(HttpClient client, URI baseUri, String idemKey, String body)
-            throws Exception {
-        var request = HttpRequest.newBuilder(baseUri.resolve("/agentic_commerce/delegate_payment"))
-                .header("Authorization", "Bearer test")
-                .header("API-Version", ApiVersion.SUPPORTED)
-                .header("Content-Type", "application/json")
-                .header("Idempotency-Key", idemKey)
-                .header("Request-Id", "req-" + idemKey)
-                .POST(HttpRequest.BodyPublishers.ofString(body))
-                .build();
-        return client.send(request, HttpResponse.BodyHandlers.ofString());
-    }
-
-    private static JettyHttpServer newServer(TlsConfiguration tlsConfiguration) {
-        return newServer(tlsConfiguration, defaultSecurityConfiguration(), Clock.systemUTC());
-    }
-
-    private static JettyHttpServer newServer(
-            TlsConfiguration tlsConfiguration,
-            SecurityConfiguration securityConfiguration,
-            Clock clock) {
-        var checkout = new InMemoryCheckoutSessionService();
-        var delegate = new InMemoryDelegatePaymentService();
-        var authenticator = new ConfigurableRequestAuthenticator(securityConfiguration, clock);
-        return new JettyHttpServer(JettyHttpServer.Configuration.httpsOnly(tlsConfiguration), checkout, delegate, authenticator);
-    }
-
-    private static SecurityConfiguration defaultSecurityConfiguration() {
-        return new SecurityConfiguration(
-                Set.of("test"),
-                Map.of(),
-                java.time.Duration.ofMinutes(5));
     }
 }

@@ -1,33 +1,19 @@
 package com.amannmalik.acp.testsuite.codec;
 
-import com.amannmalik.acp.api.checkout.model.Address;
-import com.amannmalik.acp.api.checkout.model.CheckoutSessionCompleteRequest;
-import com.amannmalik.acp.api.checkout.model.CheckoutSessionCreateRequest;
-import com.amannmalik.acp.api.checkout.model.CheckoutSessionUpdateRequest;
-import com.amannmalik.acp.api.checkout.model.Item;
-import com.amannmalik.acp.api.checkout.model.PaymentData;
-import com.amannmalik.acp.api.checkout.model.PaymentProvider;
+import com.amannmalik.acp.api.checkout.model.*;
 import com.amannmalik.acp.codec.CheckoutSessionJsonCodec;
-import jakarta.json.Json;
-import jakarta.json.JsonObject;
-import jakarta.json.JsonValue;
-import jakarta.json.JsonString;
+import jakarta.json.*;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.Test;
 
-import java.io.ByteArrayInputStream;
-import java.io.ByteArrayOutputStream;
-import java.io.InputStream;
-import java.time.Instant;
+import java.io.*;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.time.Instant;
 import java.util.List;
 
-import static org.junit.jupiter.api.Assertions.assertEquals;
-import static org.junit.jupiter.api.Assertions.assertNotNull;
-import static org.junit.jupiter.api.Assertions.assertNull;
-import static org.junit.jupiter.api.Assertions.assertTrue;
+import static org.junit.jupiter.api.Assertions.*;
 
 final class CheckoutSessionJsonCodecExamplesTest {
     private static JsonObject examples;
@@ -40,6 +26,15 @@ final class CheckoutSessionJsonCodecExamplesTest {
         }
     }
 
+    private static Path examplePath(String filename) {
+        return Path.of("specification", "2025-09-29", "examples", filename);
+    }
+
+    private static InputStream asStream(JsonValue value) {
+        byte[] bytes = value.toString().getBytes(StandardCharsets.UTF_8);
+        return new ByteArrayInputStream(bytes);
+    }
+
     @Test
     void createRequestMatchesExampleFixture() {
         var requestJson = examples.getJsonObject("create_checkout_session_request");
@@ -48,8 +43,8 @@ final class CheckoutSessionJsonCodecExamplesTest {
 
         List<Item> items = request.items();
         assertEquals(1, items.size());
-        assertEquals("item_123", items.get(0).id());
-        assertEquals(1, items.get(0).quantity());
+        assertEquals("item_123", items.getFirst().id());
+        assertEquals(1, items.getFirst().quantity());
         Address address = request.fulfillmentAddress();
         assertNotNull(address);
         assertEquals("John Doe", address.name());
@@ -112,7 +107,7 @@ final class CheckoutSessionJsonCodecExamplesTest {
         assertRoundTrip("cancel_checkout_session_response");
     }
 
-    private void assertRoundTrip(String exampleKey) throws Exception {
+    private void assertRoundTrip(String exampleKey) {
         var expected = examples.getJsonObject(exampleKey);
         var session = codec.readCheckoutSession(asStream(expected));
         var output = new ByteArrayOutputStream();
@@ -165,14 +160,5 @@ final class CheckoutSessionJsonCodecExamplesTest {
         } catch (Exception ignored) {
             return false;
         }
-    }
-
-    private static Path examplePath(String filename) {
-        return Path.of("specification", "2025-09-29", "examples", filename);
-    }
-
-    private static InputStream asStream(JsonValue value) {
-        byte[] bytes = value.toString().getBytes(StandardCharsets.UTF_8);
-        return new ByteArrayInputStream(bytes);
     }
 }

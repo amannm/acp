@@ -13,10 +13,6 @@ public enum CheckoutSessionStatus {
         this.jsonValue = jsonValue;
     }
 
-    public String jsonValue() {
-        return jsonValue;
-    }
-
     public static CheckoutSessionStatus fromJsonValue(final String value) {
         for (final CheckoutSessionStatus status : values()) {
             if (status.jsonValue.equals(value)) {
@@ -24,5 +20,9 @@ public enum CheckoutSessionStatus {
             }
         }
         throw new IllegalArgumentException("Unknown checkout session status: " + value);
+    }
+
+    public String jsonValue() {
+        return jsonValue;
     }
 }

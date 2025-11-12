@@ -9,9 +9,7 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
 import java.net.URI;
-import java.time.Clock;
-import java.time.Instant;
-import java.time.ZoneOffset;
+import java.time.*;
 import java.util.*;
 
 import static org.junit.jupiter.api.Assertions.*;
@@ -60,7 +58,7 @@ final class InMemoryCheckoutSessionServiceTest {
         assertNotNull(completed.order());
         assertEquals(2, webhookPublisher.events.size());
 
-        var createEvent = webhookPublisher.events.get(0);
+        var createEvent = webhookPublisher.events.getFirst();
         assertEquals(OrderWebhookEvent.Type.ORDER_CREATE, createEvent.type());
         assertEquals(OrderWebhookEvent.OrderStatus.CREATED, createEvent.status());
         assertEquals(session.id().value(), createEvent.checkoutSessionId());
@@ -94,7 +92,7 @@ final class InMemoryCheckoutSessionServiceTest {
 
         assertEquals(CheckoutSessionStatus.NOT_READY_FOR_PAYMENT, session.status());
         assertFalse(session.messages().isEmpty());
-        assertTrue(session.messages().get(0) instanceof Message.Info info
+        assertTrue(session.messages().getFirst() instanceof Message.Info info
                 && "$.fulfillment_address".equals(info.param()));
     }
 

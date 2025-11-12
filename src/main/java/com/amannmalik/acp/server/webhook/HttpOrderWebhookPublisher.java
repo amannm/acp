@@ -14,10 +14,7 @@ import java.net.http.*;
 import java.nio.charset.StandardCharsets;
 import java.security.GeneralSecurityException;
 import java.time.Clock;
-import java.util.Base64;
-import java.util.List;
-import java.util.Objects;
-import java.util.UUID;
+import java.util.*;
 import java.util.function.Supplier;
 
 public final class HttpOrderWebhookPublisher implements OrderWebhookPublisher {
@@ -48,6 +45,10 @@ public final class HttpOrderWebhookPublisher implements OrderWebhookPublisher {
         this.clock = clock == null ? Clock.systemUTC() : clock;
         this.requestIdSupplier =
                 Objects.requireNonNullElse(requestIdSupplier, HttpOrderWebhookPublisher::defaultRequestId);
+    }
+
+    private static String defaultRequestId() {
+        return "req_" + UUID.randomUUID();
     }
 
     @Override
@@ -115,9 +116,5 @@ public final class HttpOrderWebhookPublisher implements OrderWebhookPublisher {
         } catch (GeneralSecurityException e) {
             throw new IllegalStateException("Failed to initialize webhook signature", e);
         }
-    }
-
-    private static String defaultRequestId() {
-        return "req_" + UUID.randomUUID();
     }
 }

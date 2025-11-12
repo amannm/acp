@@ -6,9 +6,9 @@ import com.amannmalik.acp.api.shared.ErrorResponse;
 import com.amannmalik.acp.codec.DelegatePaymentJsonCodec;
 import com.amannmalik.acp.codec.JsonDecodingException;
 import com.amannmalik.acp.server.security.RequestAuthenticator;
-import jakarta.servlet.ServletException;
 import jakarta.servlet.http.*;
 
+import java.io.ByteArrayInputStream;
 import java.io.IOException;
 import java.util.Locale;
 
@@ -51,14 +51,14 @@ public final class DelegatePaymentServlet extends HttpServlet {
     }
 
     @Override
-    protected void doPost(HttpServletRequest req, HttpServletResponse resp) throws ServletException, IOException {
+    protected void doPost(HttpServletRequest req, HttpServletResponse resp) throws IOException {
         handleWithErrors(req, resp, () -> {
             validateHeaders(req);
             requireJsonPayload(req);
             var body = readBody(req);
             authenticator.authenticate(req, body);
             var idempotencyKey = normalizeHeader(req.getHeader("Idempotency-Key"));
-            var delegateRequest = codec.readRequest(new java.io.ByteArrayInputStream(body));
+            var delegateRequest = codec.readRequest(new ByteArrayInputStream(body));
             var response = service.create(delegateRequest, idempotencyKey);
             resp.setStatus(HttpServletResponse.SC_CREATED);
             propagateCorrelationHeaders(req, resp);

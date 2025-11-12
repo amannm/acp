@@ -1,29 +1,42 @@
 package com.amannmalik.acp.checkout;
 
-import com.amannmalik.acp.api.checkout.InMemoryCheckoutSessionService;
-import com.amannmalik.acp.api.checkout.CheckoutSessionIdempotencyConflictException;
-import com.amannmalik.acp.api.checkout.CheckoutSessionValidationException;
+import com.amannmalik.acp.api.checkout.*;
 import com.amannmalik.acp.api.checkout.model.*;
 import com.amannmalik.acp.api.shared.CurrencyCode;
 import com.amannmalik.acp.spi.webhook.OrderWebhookEvent;
 import com.amannmalik.acp.spi.webhook.OrderWebhookPublisher;
 import org.junit.jupiter.api.Test;
 
-import java.time.Clock;
-import java.time.Instant;
-import java.time.ZoneOffset;
-import java.util.ArrayList;
-import java.util.List;
-import java.util.Map;
+import java.time.*;
+import java.util.*;
 
-import static org.junit.jupiter.api.Assertions.assertEquals;
-import static org.junit.jupiter.api.Assertions.assertNotNull;
-import static org.junit.jupiter.api.Assertions.assertThrows;
-import static org.junit.jupiter.api.Assertions.assertTrue;
+import static org.junit.jupiter.api.Assertions.*;
 
 final class InMemoryCheckoutSessionServiceTest {
     private static final CurrencyCode USD = new CurrencyCode("usd");
     private static final Clock CLOCK = Clock.fixed(Instant.parse("2025-11-10T00:00:00Z"), ZoneOffset.UTC);
+
+    private static InMemoryCheckoutSessionService service(OrderWebhookPublisher publisher) {
+        var priceBook = Map.of(
+                "item_123", 1_000L,
+                "item_456", 2_000L);
+        return new InMemoryCheckoutSessionService(priceBook, CLOCK, USD, publisher);
+    }
+
+    private static Buyer buyer() {
+        return new Buyer("Jane", "Doe", "jane@example.com", "15555555555");
+    }
+
+    private static Address address() {
+        return new Address(
+                "Jane Doe",
+                "1234 Chat Road",
+                null,
+                "San Francisco",
+                "CA",
+                "US",
+                "94131");
+    }
 
     @Test
     void createWithoutAddressIsNotReady() {
@@ -74,28 +87,6 @@ final class InMemoryCheckoutSessionServiceTest {
         var session = service.create(new CheckoutSessionCreateRequest(List.of(new Item("item_123", 1)), null, null), null);
         var completeRequest = new CheckoutSessionCompleteRequest(null, new PaymentData("tok_123", PaymentProvider.Provider.STRIPE, null));
         assertThrows(CheckoutSessionValidationException.class, () -> service.complete(session.id(), completeRequest, "idem"));
-    }
-
-    private static InMemoryCheckoutSessionService service(OrderWebhookPublisher publisher) {
-        var priceBook = Map.of(
-                "item_123", 1_000L,
-                "item_456", 2_000L);
-        return new InMemoryCheckoutSessionService(priceBook, CLOCK, USD, publisher);
-    }
-
-    private static Buyer buyer() {
-        return new Buyer("Jane", "Doe", "jane@example.com", "15555555555");
-    }
-
-    private static Address address() {
-        return new Address(
-                "Jane Doe",
-                "1234 Chat Road",
-                null,
-                "San Francisco",
-                "CA",
-                "US",
-                "94131");
     }
 
     private static final class RecordingWebhookPublisher implements OrderWebhookPublisher {

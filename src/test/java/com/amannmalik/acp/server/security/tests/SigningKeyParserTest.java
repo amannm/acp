@@ -1,16 +1,14 @@
 package com.amannmalik.acp.server.security.tests;
 
-import com.amannmalik.acp.server.security.SigningKeyParser;
 import com.amannmalik.acp.server.security.SecurityConfiguration.SigningKey;
+import com.amannmalik.acp.server.security.SigningKeyParser;
 import org.junit.jupiter.api.Test;
 
 import java.security.KeyPairGenerator;
 import java.util.Base64;
 import java.util.List;
 
-import static org.junit.jupiter.api.Assertions.assertArrayEquals;
-import static org.junit.jupiter.api.Assertions.assertEquals;
-import static org.junit.jupiter.api.Assertions.assertThrows;
+import static org.junit.jupiter.api.Assertions.*;
 
 final class SigningKeyParserTest {
     @Test

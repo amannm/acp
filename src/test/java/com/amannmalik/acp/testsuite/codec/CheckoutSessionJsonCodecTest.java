@@ -1,31 +1,10 @@
 package com.amannmalik.acp.testsuite.codec;
 
-import com.amannmalik.acp.api.checkout.model.Address;
-import com.amannmalik.acp.api.checkout.model.Buyer;
-import com.amannmalik.acp.api.checkout.model.CheckoutSession;
-import com.amannmalik.acp.api.checkout.model.CheckoutSessionCompleteRequest;
-import com.amannmalik.acp.api.checkout.model.CheckoutSessionCreateRequest;
-import com.amannmalik.acp.api.checkout.model.CheckoutSessionId;
-import com.amannmalik.acp.api.checkout.model.CheckoutSessionStatus;
-import com.amannmalik.acp.api.checkout.model.CheckoutSessionUpdateRequest;
-import com.amannmalik.acp.api.checkout.model.FulfillmentOption;
-import com.amannmalik.acp.api.checkout.model.FulfillmentOptionId;
-import com.amannmalik.acp.api.checkout.model.Item;
-import com.amannmalik.acp.api.checkout.model.LineItem;
-import com.amannmalik.acp.api.checkout.model.Link;
-import com.amannmalik.acp.api.checkout.model.Message;
-import com.amannmalik.acp.api.checkout.model.Order;
-import com.amannmalik.acp.api.checkout.model.PaymentData;
-import com.amannmalik.acp.api.checkout.model.PaymentProvider;
-import com.amannmalik.acp.api.checkout.model.Total;
-import com.amannmalik.acp.api.shared.CurrencyCode;
-import com.amannmalik.acp.api.shared.ErrorResponse;
-import com.amannmalik.acp.api.shared.MinorUnitAmount;
+import com.amannmalik.acp.api.checkout.model.*;
+import com.amannmalik.acp.api.shared.*;
 import com.amannmalik.acp.codec.CheckoutSessionJsonCodec;
-
 import jakarta.json.Json;
 import jakarta.json.JsonObject;
-
 import org.junit.jupiter.api.Test;
 
 import java.io.ByteArrayInputStream;
@@ -35,9 +14,7 @@ import java.nio.charset.StandardCharsets;
 import java.time.Instant;
 import java.util.List;
 
-import static org.junit.jupiter.api.Assertions.assertEquals;
-import static org.junit.jupiter.api.Assertions.assertNotNull;
-import static org.junit.jupiter.api.Assertions.assertTrue;
+import static org.junit.jupiter.api.Assertions.*;
 
 final class CheckoutSessionJsonCodecTest {
     private static CheckoutSession sampleSession() {
@@ -95,6 +72,16 @@ final class CheckoutSessionJsonCodecTest {
                 messages,
                 links,
                 order);
+    }
+
+    private static JsonObject readJson(ByteArrayOutputStream output) {
+        try (var reader = Json.createReader(new ByteArrayInputStream(output.toByteArray()))) {
+            return reader.readObject();
+        }
+    }
+
+    private static ByteArrayInputStream input(String json) {
+        return new ByteArrayInputStream(json.getBytes(StandardCharsets.UTF_8));
     }
 
     @Test
@@ -208,7 +195,7 @@ final class CheckoutSessionJsonCodecTest {
 
         CheckoutSessionCreateRequest createRequest = codec.readCreateRequest(input(createJson));
         assertEquals(1, createRequest.items().size());
-        assertEquals(2, createRequest.items().get(0).quantity());
+        assertEquals(2, createRequest.items().getFirst().quantity());
         assertNotNull(createRequest.buyer());
         assertEquals("San Francisco", createRequest.fulfillmentAddress().city());
 
@@ -219,15 +206,5 @@ final class CheckoutSessionJsonCodecTest {
         CheckoutSessionCompleteRequest completeRequest = codec.readCompleteRequest(input(completeJson));
         assertEquals("tok_sample", completeRequest.paymentData().token());
         assertEquals(PaymentProvider.Provider.STRIPE, completeRequest.paymentData().provider());
-    }
-
-    private static JsonObject readJson(ByteArrayOutputStream output) {
-        try (var reader = Json.createReader(new ByteArrayInputStream(output.toByteArray()))) {
-            return reader.readObject();
-        }
-    }
-
-    private static ByteArrayInputStream input(String json) {
-        return new ByteArrayInputStream(json.getBytes(StandardCharsets.UTF_8));
     }
 }

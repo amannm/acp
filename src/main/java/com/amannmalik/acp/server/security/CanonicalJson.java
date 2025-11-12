@@ -1,6 +1,7 @@
 package com.amannmalik.acp.server.security;
 
 import jakarta.json.*;
+import jakarta.json.stream.JsonParsingException;
 
 import java.io.ByteArrayInputStream;
 import java.util.*;
@@ -18,7 +19,7 @@ final class CanonicalJson {
             var builder = new StringBuilder();
             write(value, builder);
             return builder.toString();
-        } catch (jakarta.json.stream.JsonParsingException e) {
+        } catch (JsonParsingException e) {
             throw new IllegalArgumentException("Request body is not valid JSON", e);
         }
     }
@@ -29,13 +30,12 @@ final class CanonicalJson {
             case OBJECT -> writeObject(value.asJsonObject(), builder);
             case ARRAY -> writeArray(value.asJsonArray(), builder);
             case STRING -> builder.append(quote(((JsonString) value).getString()));
-            case NUMBER -> builder.append(value);
-            case TRUE, FALSE, NULL -> builder.append(value);
+            case NUMBER, TRUE, FALSE, NULL -> builder.append(value);
             default -> throw new IllegalStateException("Unhandled JSON value type: " + type);
         }
     }
 
-    private static void writeObject(jakarta.json.JsonObject object, StringBuilder builder) {
+    private static void writeObject(JsonObject object, StringBuilder builder) {
         builder.append('{');
         List<String> keys = new ArrayList<>(object.keySet());
         Collections.sort(keys);
@@ -51,7 +51,7 @@ final class CanonicalJson {
         builder.append('}');
     }
 
-    private static void writeArray(jakarta.json.JsonArray array, StringBuilder builder) {
+    private static void writeArray(JsonArray array, StringBuilder builder) {
         builder.append('[');
         var size = array.size();
         for (int i = 0; i < size; i++) {

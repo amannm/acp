@@ -3,11 +3,20 @@ package com.amannmalik.acp.address;
 import com.amannmalik.acp.api.checkout.model.Address;
 import org.junit.jupiter.api.Test;
 
-import static org.junit.jupiter.api.Assertions.assertEquals;
-import static org.junit.jupiter.api.Assertions.assertNull;
-import static org.junit.jupiter.api.Assertions.assertThrows;
+import static org.junit.jupiter.api.Assertions.*;
 
 final class AddressTest {
+    private static Address buildAddress(String state, String country) {
+        return new Address(
+                "Jane Doe",
+                "1234 Chat Road",
+                null,
+                "San Francisco",
+                state,
+                country,
+                "94131");
+    }
+
     @Test
     void stateMayBeOmitted() {
         var address = buildAddress(null, "us");
@@ -23,16 +32,5 @@ final class AddressTest {
     @Test
     void nonIsoCountryCodesAreRejected() {
         assertThrows(IllegalArgumentException.class, () -> buildAddress("CA", "usa"));
-    }
-
-    private static Address buildAddress(String state, String country) {
-        return new Address(
-                "Jane Doe",
-                "1234 Chat Road",
-                null,
-                "San Francisco",
-                state,
-                country,
-                "94131");
     }
 }

@@ -1,18 +1,23 @@
 package com.amannmalik.acp.cli.test;
 
+import com.amannmalik.acp.cli.Entrypoint;
 import org.junit.jupiter.api.Test;
 import picocli.CommandLine;
-import com.amannmalik.acp.cli.Entrypoint;
 
-import java.io.ByteArrayOutputStream;
-import java.io.OutputStream;
-import java.io.PrintWriter;
+import java.io.*;
 import java.nio.charset.StandardCharsets;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 final class EntrypointTest {
+    private static CommandLine configureTestCommandLine() {
+        var commandLine = Entrypoint.commandLine();
+        var err = new PrintWriter(OutputStream.nullOutputStream(), true, StandardCharsets.UTF_8);
+        commandLine.setErr(err);
+        return commandLine;
+    }
+
     @Test
     void helpOptionIsAvailable() {
         var cli = configureTestCommandLine();
@@ -31,12 +36,5 @@ final class EntrypointTest {
         var exitCode = cli.execute("--version");
         assertEquals(0, exitCode);
         assertTrue(stdout.toString(StandardCharsets.UTF_8).toLowerCase().contains("acp"));
-    }
-
-    private static CommandLine configureTestCommandLine() {
-        var commandLine = Entrypoint.commandLine();
-        var err = new PrintWriter(OutputStream.nullOutputStream(), true, StandardCharsets.UTF_8);
-        commandLine.setErr(err);
-        return commandLine;
     }
 }

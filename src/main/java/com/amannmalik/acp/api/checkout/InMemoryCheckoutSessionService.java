@@ -71,7 +71,7 @@ public final class InMemoryCheckoutSessionService implements CheckoutSessionServ
     }
 
     private static List<Item> extractItems(CheckoutSession session) {
-        return session.lineItems().stream().map(LineItem::item).collect(Collectors.toUnmodifiableList());
+        return session.lineItems().stream().map(LineItem::item).toList();
     }
 
     private static long sum(List<LineItem> lineItems, ToLongFunction<LineItem> mapper) {
@@ -339,7 +339,7 @@ public final class InMemoryCheckoutSessionService implements CheckoutSessionServ
         if (options.isEmpty()) {
             return null;
         }
-        return new FulfillmentOptionId(options.get(0).id());
+        return new FulfillmentOptionId(options.getFirst().id());
     }
 
     private List<Total> computeTotals(
@@ -483,11 +483,11 @@ public final class InMemoryCheckoutSessionService implements CheckoutSessionServ
                 var message = readiness.missing().isEmpty()
                         ? "Checkout session is not ready for payment"
                         : readiness.missing().stream()
-                                .map(MissingRequirement::message)
-                                .collect(Collectors.joining("; "));
+                        .map(MissingRequirement::message)
+                        .collect(Collectors.joining("; "));
                 var param = readiness.missing().isEmpty()
                         ? "$.status"
-                        : readiness.missing().get(0).param();
+                        : readiness.missing().getFirst().param();
                 throw new CheckoutSessionValidationException(message, "session_not_ready", param);
             }
             var buyer = request.buyer() != null ? request.buyer() : current.buyer();

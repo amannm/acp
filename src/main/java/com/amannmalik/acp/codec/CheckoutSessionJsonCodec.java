@@ -1,17 +1,14 @@
 package com.amannmalik.acp.codec;
 
 import com.amannmalik.acp.api.checkout.model.*;
-import com.amannmalik.acp.api.shared.ErrorResponse;
-import com.amannmalik.acp.api.shared.MinorUnitAmount;
+import com.amannmalik.acp.api.shared.*;
 import jakarta.json.*;
 
 import java.io.InputStream;
 import java.io.OutputStream;
+import java.net.URI;
 import java.time.Instant;
-import java.util.ArrayList;
-import java.util.List;
-import java.util.Locale;
-import java.util.stream.Collectors;
+import java.util.*;
 
 /// See specification/2025-09-29/spec/openapi/openapi.agentic_checkout.yaml
 public final class CheckoutSessionJsonCodec {
@@ -294,7 +291,7 @@ public final class CheckoutSessionJsonCodec {
             var jsonObject = value.asJsonObject();
             var type = Link.LinkType.valueOf(
                     JsonSupport.requireString(jsonObject, "type").toUpperCase(Locale.ROOT));
-            links.add(new Link(type, java.net.URI.create(JsonSupport.requireString(jsonObject, "url"))));
+            links.add(new Link(type, URI.create(JsonSupport.requireString(jsonObject, "url"))));
         }
         return List.copyOf(links);
     }
@@ -306,7 +303,7 @@ public final class CheckoutSessionJsonCodec {
         return new Order(
                 JsonSupport.requireString(jsonObject, "id"),
                 new CheckoutSessionId(JsonSupport.requireString(jsonObject, "checkout_session_id")),
-                java.net.URI.create(JsonSupport.requireString(jsonObject, "permalink_url")));
+                URI.create(JsonSupport.requireString(jsonObject, "permalink_url")));
     }
 
     private static PaymentProvider mapPaymentProvider(JsonObject jsonObject) {
@@ -318,7 +315,7 @@ public final class CheckoutSessionJsonCodec {
         var methods = jsonObject.getJsonArray("supported_payment_methods").stream()
                 .map(value -> ((JsonString) value).getString())
                 .map(value -> PaymentProvider.PaymentMethod.valueOf(value.toUpperCase(Locale.ROOT)))
-                .collect(Collectors.toUnmodifiableList());
+                .toList();
         return new PaymentProvider(provider, methods);
     }
 
@@ -396,7 +393,7 @@ public final class CheckoutSessionJsonCodec {
             provider = DEFAULT_PAYMENT_PROVIDER;
         }
         var status = CheckoutSessionStatus.fromJsonValue(JsonSupport.requireString(root, "status"));
-        var currency = new com.amannmalik.acp.api.shared.CurrencyCode(JsonSupport.requireString(root, "currency"));
+        var currency = new CurrencyCode(JsonSupport.requireString(root, "currency"));
         var lineItems = mapLineItems(JsonSupport.requireArray(root, "line_items"));
         var fulfillmentAddress = AddressJson.readOptional(root, "fulfillment_address");
         var fulfillmentOptions = mapFulfillmentOptions(JsonSupport.requireArray(root, "fulfillment_options"));

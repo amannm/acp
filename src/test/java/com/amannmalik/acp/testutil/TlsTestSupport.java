@@ -1,32 +1,30 @@
 package com.amannmalik.acp.testutil;
 
 import com.amannmalik.acp.server.TlsConfiguration;
-import java.math.BigInteger;
-import java.nio.file.Files;
-import java.nio.file.Path;
-import java.security.KeyPair;
-import java.security.KeyPairGenerator;
-import java.security.KeyStore;
-import java.security.SecureRandom;
-import java.security.cert.Certificate;
-import java.security.cert.X509Certificate;
-import java.time.Instant;
-import java.util.Arrays;
-import javax.net.ssl.SSLContext;
-import javax.net.ssl.TrustManagerFactory;
 import org.bouncycastle.asn1.x500.X500Name;
-import org.bouncycastle.asn1.x509.Extension;
-import org.bouncycastle.asn1.x509.GeneralName;
-import org.bouncycastle.asn1.x509.GeneralNames;
+import org.bouncycastle.asn1.x509.*;
 import org.bouncycastle.cert.jcajce.JcaX509CertificateConverter;
 import org.bouncycastle.cert.jcajce.JcaX509v3CertificateBuilder;
 import org.bouncycastle.operator.ContentSigner;
 import org.bouncycastle.operator.jcajce.JcaContentSignerBuilder;
 
+import javax.net.ssl.SSLContext;
+import javax.net.ssl.TrustManagerFactory;
+import java.math.BigInteger;
+import java.nio.file.Files;
+import java.nio.file.Path;
+import java.security.*;
+import java.security.cert.Certificate;
+import java.security.cert.X509Certificate;
+import java.time.Instant;
+import java.util.Arrays;
+import java.util.Date;
+
 public final class TlsTestSupport {
     private static final char[] PASSWORD = "changeit".toCharArray();
 
-    private TlsTestSupport() {}
+    private TlsTestSupport() {
+    }
 
     public static TestContext createTlsContext() {
         try {
@@ -49,8 +47,8 @@ public final class TlsTestSupport {
 
     private static X509Certificate selfSignedCertificate(KeyPair keyPair) throws Exception {
         var now = Instant.now();
-        var notBefore = java.util.Date.from(now.minusSeconds(300));
-        var notAfter = java.util.Date.from(now.plusSeconds(31536000));
+        var notBefore = Date.from(now.minusSeconds(300));
+        var notAfter = Date.from(now.plusSeconds(31536000));
         var subject = new X500Name("CN=localhost");
         var serial = new BigInteger(160, new SecureRandom());
         var contentSigner = signer(keyPair);
@@ -74,7 +72,7 @@ public final class TlsTestSupport {
     private static Path writeKeyStore(KeyPair keyPair, X509Certificate certificate) throws Exception {
         var keyStore = KeyStore.getInstance("PKCS12");
         keyStore.load(null, null);
-        keyStore.setKeyEntry("server", keyPair.getPrivate(), PASSWORD, new Certificate[] {certificate});
+        keyStore.setKeyEntry("server", keyPair.getPrivate(), PASSWORD, new Certificate[]{certificate});
         var path = Files.createTempFile("acp-test-keystore", ".p12");
         try (var output = Files.newOutputStream(path)) {
             keyStore.store(output, PASSWORD);
