@@ -42,7 +42,7 @@ final class InMemoryCheckoutSessionServiceTest {
     void createWithoutAddressIsNotReady() {
         var service = service(new RecordingWebhookPublisher());
         var request = new CheckoutSessionCreateRequest(List.of(new Item("item_123", 1)), null, null);
-        var session = service.create(request, null);
+        var session = service.create(request, "idem-missing-address");
         assertEquals(CheckoutSessionStatus.NOT_READY_FOR_PAYMENT, session.status());
         assertTrue(session.messages().stream().anyMatch(message -> message.content().contains("fulfillment_address")));
     }
@@ -70,7 +70,7 @@ final class InMemoryCheckoutSessionServiceTest {
     void completeEmitsWebhooksAndIsIdempotent() {
         var publisher = new RecordingWebhookPublisher();
         var service = service(publisher);
-        var session = service.create(new CheckoutSessionCreateRequest(List.of(new Item("item_123", 1)), buyer(), address()), null);
+        var session = service.create(new CheckoutSessionCreateRequest(List.of(new Item("item_123", 1)), buyer(), address()), "idem-complete-ready");
         var completeRequest = new CheckoutSessionCompleteRequest(buyer(), new PaymentData("tok_123", PaymentProvider.Provider.STRIPE, null));
         var completed = service.complete(session.id(), completeRequest, "complete-key");
         assertEquals(CheckoutSessionStatus.COMPLETED, completed.status());
@@ -84,7 +84,7 @@ final class InMemoryCheckoutSessionServiceTest {
     @Test
     void completeFailsWhenSessionNotReady() {
         var service = service(new RecordingWebhookPublisher());
-        var session = service.create(new CheckoutSessionCreateRequest(List.of(new Item("item_123", 1)), null, null), null);
+        var session = service.create(new CheckoutSessionCreateRequest(List.of(new Item("item_123", 1)), null, null), "idem-not-ready");
         var completeRequest = new CheckoutSessionCompleteRequest(null, new PaymentData("tok_123", PaymentProvider.Provider.STRIPE, null));
         assertThrows(CheckoutSessionValidationException.class, () -> service.complete(session.id(), completeRequest, "idem"));
     }

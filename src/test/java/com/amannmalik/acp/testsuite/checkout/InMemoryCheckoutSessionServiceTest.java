@@ -24,7 +24,7 @@ final class InMemoryCheckoutSessionServiceTest {
                 null,
                 null);
 
-        var session = service.create(request, null);
+        var session = service.create(request, "idem-testsuite-create");
 
         assertEquals(CheckoutSessionStatus.NOT_READY_FOR_PAYMENT, session.status());
         assertEquals("usd", session.currency().value());
@@ -59,7 +59,9 @@ final class InMemoryCheckoutSessionServiceTest {
         var service = new InMemoryCheckoutSessionService(
                 Map.of("item_test", 1200L), FIXED_CLOCK, new CurrencyCode("usd"), publisher);
 
-        var session = service.create(new CheckoutSessionCreateRequest(List.of(new Item("item_test", 1)), null, null), null);
+        var session = service.create(
+                new CheckoutSessionCreateRequest(List.of(new Item("item_test", 1)), null, null),
+                "idem-testsuite-complete");
         var address = new Address(
                 "Test Buyer",
                 "123 Test Street",

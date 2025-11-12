@@ -130,7 +130,11 @@ public final class InMemoryCheckoutSessionService implements CheckoutSessionServ
     public CheckoutSession create(CheckoutSessionCreateRequest request, String idempotencyKey) {
         var normalizedKey = normalizeIdempotencyKey(idempotencyKey);
         if (normalizedKey == null) {
-            return createNewSession(request);
+            throw new CheckoutSessionValidationException(
+                    "Idempotency-Key is required for this endpoint",
+                    "missing_idempotency_key",
+                    "$.headers.Idempotency-Key",
+                    HTTP_BAD_REQUEST);
         }
         var createdSession = new AtomicReference<CheckoutSession>();
         var stored = createIdempotency.compute(normalizedKey, (key, existing) -> {

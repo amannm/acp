@@ -129,7 +129,7 @@ final class CheckoutSessionServletTest {
                     """
                             {"items":[{"id":"item_123","quantity":1}]}
                             """,
-                    null,
+                    "idem-create-and-retrieve",
                     "req-create-1");
 
             assertEquals(201, createResponse.statusCode());
@@ -212,7 +212,7 @@ final class CheckoutSessionServletTest {
                     """
                             {"items":[{"id":"unknown_item","quantity":1}]}
                             """,
-                    null,
+                    "idem-create-unknown",
                     "req-create-unknown");
 
             assertEquals(400, response.statusCode());
@@ -236,7 +236,7 @@ final class CheckoutSessionServletTest {
                     """
                             {"items":[{"id":"item_123","quantity":1}]}
                             """,
-                    null,
+                    "idem-complete-setup",
                     "req-complete-1");
             var sessionId = json(create.body()).getString("id");
 
@@ -284,7 +284,7 @@ final class CheckoutSessionServletTest {
                     """
                             {"items":[{"id":"item_123","quantity":1}]}
                             """,
-                    null,
+                    "idem-complete-conflict-setup",
                     "req-complete-4");
             var sessionId = json(create.body()).getString("id");
 
@@ -421,6 +421,28 @@ final class CheckoutSessionServletTest {
     }
 
     @Test
+    void createWithoutIdempotencyKeyReturns400() throws Exception {
+        try (var tls = TlsTestSupport.createTlsContext();
+             var server = newServer(tls.configuration())) {
+            server.start();
+            var client = HttpClient.newBuilder().sslContext(tls.sslContext()).build();
+            var baseUri = URI.create("https://localhost:" + server.httpsPort());
+            var response = sendCreateRequest(
+                    client,
+                    baseUri,
+                    """
+                            {"items":[{"id":"item_123","quantity":1}]}
+                            """,
+                    null,
+                    "req-missing-idem-create");
+            assertEquals(400, response.statusCode());
+            var errorJson = json(response.body());
+            assertEquals("invalid_request", errorJson.getString("type"));
+            assertEquals("missing_idempotency_key", errorJson.getString("code"));
+        }
+    }
+
+    @Test
     void completeWithoutIdempotencyKeyReturns400() throws Exception {
         try (var tls = TlsTestSupport.createTlsContext();
              var server = newServer(tls.configuration())) {
@@ -433,7 +455,7 @@ final class CheckoutSessionServletTest {
                     """
                             {"items":[{"id":"item_123","quantity":1}]}
                             """,
-                    null,
+                    "idem-complete-missing-create",
                     "req-complete-missing");
             var sessionId = json(create.body()).getString("id");
 
@@ -467,7 +489,7 @@ final class CheckoutSessionServletTest {
                     """
                             {"items":[{"id":"item_123","quantity":1}]}
                             """,
-                    null,
+                    "idem-update-invalid",
                     "req-update-conflict");
             var sessionId = json(create.body()).getString("id");
 
@@ -500,7 +522,7 @@ final class CheckoutSessionServletTest {
                     """
                             {"items":[{"id":"item_123","quantity":1}]}
                             """,
-                    null,
+                    "idem-update-too-long-create",
                     "req-update-too-long");
             var sessionId = json(create.body()).getString("id");
 
@@ -543,7 +565,7 @@ final class CheckoutSessionServletTest {
                     """
                             {"items":[{"id":"item_123","quantity":1}]}
                             """,
-                    null,
+                    "idem-cancel-session",
                     "req-cancel-create");
             var sessionId = json(create.body()).getString("id");
 

@@ -88,7 +88,7 @@ final class InMemoryCheckoutSessionServiceTest {
                 new Buyer("Jane", "Doe", "jane@example.com", null),
                 null);
 
-        var session = service.create(request, null);
+        var session = service.create(request, "idem-no-address");
 
         assertEquals(CheckoutSessionStatus.NOT_READY_FOR_PAYMENT, session.status());
         assertFalse(session.messages().isEmpty());
@@ -103,7 +103,7 @@ final class InMemoryCheckoutSessionServiceTest {
                 new Buyer("Alex", "Doe", "alex@example.com", null),
                 null);
 
-        var session = service.create(createRequest, null);
+        var session = service.create(createRequest, "idem-digital");
         assertEquals(CheckoutSessionStatus.NOT_READY_FOR_PAYMENT, session.status());
 
         var updateRequest = new CheckoutSessionUpdateRequest(
@@ -127,7 +127,7 @@ final class InMemoryCheckoutSessionServiceTest {
                 fulfillmentAddress());
 
         var exception = assertThrows(
-                CheckoutSessionValidationException.class, () -> service.create(request, null));
+                CheckoutSessionValidationException.class, () -> service.create(request, "idem-unknown"));
         assertEquals("unknown_item", exception.code());
         assertEquals("$.items[0].id", exception.param());
         assertEquals(400, exception.status());
@@ -141,9 +141,19 @@ final class InMemoryCheckoutSessionServiceTest {
                 new CurrencyCode("eur"),
                 webhookPublisher);
 
-        var session = eurService.create(createRequest(), null);
+        var session = eurService.create(createRequest(), "idem-eur");
 
         assertEquals("eur", session.currency().value());
+    }
+
+    @Test
+    void createRequiresIdempotencyKey() {
+        var request = createRequest();
+        var exception = assertThrows(
+                CheckoutSessionValidationException.class, () -> service.create(request, null));
+        assertEquals("missing_idempotency_key", exception.code());
+        assertEquals("$.headers.Idempotency-Key", exception.param());
+        assertEquals(400, exception.status());
     }
 
     private CheckoutSessionCreateRequest createRequest() {

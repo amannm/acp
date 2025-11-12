@@ -72,7 +72,8 @@ public final class CheckoutSessionServlet extends HttpServlet {
                 authenticator.authenticate(req, body);
                 requireJsonPayload(req);
                 var request = codec.readCreateRequest(new ByteArrayInputStream(body));
-                var session = service.create(request, normalizeHeader(req.getHeader("Idempotency-Key")));
+                var idempotencyKey = ensureIdempotencyKey(req);
+                var session = service.create(request, idempotencyKey);
                 resp.setStatus(HttpServletResponse.SC_CREATED);
                 propagateCorrelationHeaders(req, resp);
                 resp.setContentType(APPLICATION_JSON);
