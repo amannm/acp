@@ -19,4 +19,5 @@ module acp.main {
     exports com.amannmalik.acp.util;
     exports com.amannmalik.acp.codec;
     exports com.amannmalik.acp.spi.webhook;
+    opens com.amannmalik.acp.cli to info.picocli;
 }

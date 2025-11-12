@@ -1,17 +1,54 @@
 package com.amannmalik.acp.cli;
 
 import picocli.CommandLine;
+import picocli.CommandLine.Command;
+import picocli.CommandLine.IVersionProvider;
 import picocli.CommandLine.Model.CommandSpec;
+import picocli.CommandLine.Spec;
 
 public final class Entrypoint {
-    public Entrypoint() {
+    private Entrypoint() {
     }
 
-    static void main(String[] args) {
-        var mainSpec = CommandSpec.create().name("acp");
-        mainSpec.usageMessage().description("Agentic Commerce Protocol CLI");
-        var commandLine = new CommandLine(mainSpec);
+    public static void main(String[] args) {
+        System.exit(commandLine().execute(args));
+    }
+
+    public static CommandLine commandLine() {
+        var commandLine = new CommandLine(new RootCommand());
         commandLine.addSubcommand("serve", new ServeCommand());
-        System.exit(commandLine.execute(args));
+        return commandLine;
+    }
+
+    @Command(
+            name = "acp",
+            description = "Agentic Commerce Protocol CLI",
+            mixinStandardHelpOptions = true,
+            versionProvider = ManifestVersionProvider.class)
+    static final class RootCommand implements Runnable {
+        @Spec
+        private CommandSpec spec;
+
+        RootCommand() {
+        }
+
+        @Override
+        public void run() {
+            spec.commandLine().usage(spec.commandLine().getOut());
+        }
+    }
+
+    public static final class ManifestVersionProvider implements IVersionProvider {
+        public ManifestVersionProvider() {
+        }
+
+        @Override
+        public String[] getVersion() {
+            var version = Entrypoint.class.getPackage().getImplementationVersion();
+            if (version == null || version.isBlank()) {
+                version = "development";
+            }
+            return new String[] {"acp " + version};
+        }
     }
 }

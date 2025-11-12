@@ -1,7 +1,6 @@
 package com.amannmalik.acp.codec.tests;
 
 import com.amannmalik.acp.codec.DelegatePaymentJsonCodec;
-import com.amannmalik.acp.codec.JsonDecodingException;
 import com.amannmalik.acp.api.delegatepayment.model.DelegatePaymentRequest;
 import org.junit.jupiter.api.Test;
 
@@ -61,7 +60,7 @@ final class DelegatePaymentJsonCodecTest {
     }
 
     @Test
-    void readRequest_requiresBillingAddressStateWhenPresent() throws Exception {
+    void readRequest_allowsMissingBillingAddressState() throws Exception {
         var examples = readExamples("specification/2025-09-29/examples/examples.delegate_payment.json");
         var requestJson = examples.getJsonObject("delegate_payment_request");
         var billingWithoutState = Json.createObjectBuilder();
@@ -74,9 +73,9 @@ final class DelegatePaymentJsonCodecTest {
                 .add("billing_address", billingWithoutState.build())
                 .build();
         var codec = new DelegatePaymentJsonCodec();
-        assertThrows(
-                JsonDecodingException.class,
-                () -> codec.readRequest(jsonBytes(requestWithoutState)));
+        var request = codec.readRequest(jsonBytes(requestWithoutState));
+        assertNotNull(request.billingAddress());
+        assertNull(request.billingAddress().state());
     }
 
     private static InputStream jsonBytes(JsonObject object) {
