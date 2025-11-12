@@ -27,7 +27,7 @@ public final class DelegatePaymentJsonCodec {
         }
         var cardNumberType = PaymentMethodCard.CardNumberType.valueOf(
                 JsonSupport.requireString(object, "card_number_type").toUpperCase());
-        var virtual = object.getBoolean("virtual", false);
+        var virtual = JsonSupport.requireBoolean(object, "virtual");
         var cryptogram = JsonSupport.optionalString(object, "cryptogram");
         var eciValue = JsonSupport.optionalString(object, "eci_value");
         List<PaymentMethodCard.Check> checks;

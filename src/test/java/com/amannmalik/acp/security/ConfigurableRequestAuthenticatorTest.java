@@ -21,6 +21,7 @@ import static org.junit.jupiter.api.Assertions.assertThrows;
 
 final class ConfigurableRequestAuthenticatorTest {
     private static final byte[] SECRET = decode("c2VjcmV0X3Rlc3Rfc2VjcmV0MTIzNDU2");
+    private static final byte[] SECRET_TWO = decode("c2Vjb25kX3NlY3JldF8wMDEyMw==");
 
     private static HttpServletRequest request(Map<String, String> headers) {
         return (HttpServletRequest) Proxy.newProxyInstance(
@@ -201,6 +202,49 @@ final class ConfigurableRequestAuthenticatorTest {
 
         var problem = assertThrows(HttpProblem.class, () -> authenticator.authenticate(request, body));
         assertEquals("invalid_signature", problem.code());
+        assertEquals(ErrorResponse.ErrorType.INVALID_REQUEST, problem.errorType());
+    }
+
+    @Test
+    @DisplayName("authenticate accepts bare Signature header when only one signing key is configured")
+    void authenticateBareSignatureSingleKey() {
+        var configuration = new SecurityConfiguration(
+                Set.of("token"),
+                Map.of("only", new SecurityConfiguration.SigningKey.HmacSha256(SECRET)),
+                Duration.ofMinutes(5));
+        var clock = Clock.fixed(Instant.parse("2025-10-30T12:00:00Z"), ZoneOffset.UTC);
+        var authenticator = new ConfigurableRequestAuthenticator(configuration, clock);
+        var timestamp = clock.instant().toString();
+        var body = "{\"items\":[]}".getBytes(StandardCharsets.UTF_8);
+        var signature = sign(timestamp, body);
+        var request = request(Map.of(
+                "Authorization", "Bearer token",
+                "Timestamp", timestamp,
+                "Signature", signature));
+
+        authenticator.authenticate(request, body);
+    }
+
+    @Test
+    @DisplayName("authenticate rejects bare Signature header when multiple signing keys are configured")
+    void authenticateBareSignatureMultipleKeys() {
+        var configuration = new SecurityConfiguration(
+                Set.of("token"),
+                Map.of(
+                        "key1", new SecurityConfiguration.SigningKey.HmacSha256(SECRET),
+                        "key2", new SecurityConfiguration.SigningKey.HmacSha256(SECRET_TWO)),
+                Duration.ofMinutes(5));
+        var authenticator = new ConfigurableRequestAuthenticator(configuration, Clock.systemUTC());
+        var timestamp = Instant.now().toString();
+        var body = "{\"items\":[]}".getBytes(StandardCharsets.UTF_8);
+        var signature = sign(timestamp, body);
+        var request = request(Map.of(
+                "Authorization", "Bearer token",
+                "Timestamp", timestamp,
+                "Signature", signature));
+
+        var problem = assertThrows(HttpProblem.class, () -> authenticator.authenticate(request, body));
+        assertEquals("missing_signature_key", problem.code());
         assertEquals(ErrorResponse.ErrorType.INVALID_REQUEST, problem.errorType());
     }
 }

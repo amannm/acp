@@ -95,4 +95,16 @@ final class JsonSupport {
     static MinorUnitAmount requireAmount(JsonObject parent, String key) {
         return new MinorUnitAmount(requireLong(parent, key));
     }
+
+    static boolean requireBoolean(JsonObject parent, String key) {
+        if (!parent.containsKey(key) || parent.isNull(key)) {
+            throw new JsonDecodingException("Missing boolean: " + key);
+        }
+        var value = parent.get(key);
+        return switch (value.getValueType()) {
+            case TRUE -> true;
+            case FALSE -> false;
+            default -> throw new JsonDecodingException("Expected boolean at: " + key);
+        };
+    }
 }

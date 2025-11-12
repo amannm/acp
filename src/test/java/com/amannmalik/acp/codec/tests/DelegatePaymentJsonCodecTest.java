@@ -2,6 +2,7 @@ package com.amannmalik.acp.codec.tests;
 
 import com.amannmalik.acp.api.delegatepayment.model.DelegatePaymentRequest;
 import com.amannmalik.acp.codec.DelegatePaymentJsonCodec;
+import com.amannmalik.acp.codec.JsonDecodingException;
 import jakarta.json.Json;
 import jakarta.json.JsonObject;
 import org.junit.jupiter.api.Test;
@@ -49,7 +50,7 @@ final class DelegatePaymentJsonCodecTest {
     }
 
     @Test
-    void readRequest_defaultsVirtualToFalseWhenMissing() throws Exception {
+    void readRequest_requiresVirtualField() throws Exception {
         var examples = readExamples("specification/2025-09-29/examples/examples.delegate_payment.json");
         var requestJson = examples.getJsonObject("delegate_payment_request");
         var paymentMethodWithoutVirtual = Json.createObjectBuilder();
@@ -62,10 +63,7 @@ final class DelegatePaymentJsonCodecTest {
                 .add("payment_method", paymentMethodWithoutVirtual.build())
                 .build();
         var codec = new DelegatePaymentJsonCodec();
-
-        var request = codec.readRequest(jsonBytes(mutated));
-
-        assertFalse(request.paymentMethod().virtual());
+        assertThrows(JsonDecodingException.class, () -> codec.readRequest(jsonBytes(mutated)));
     }
 
     @Test

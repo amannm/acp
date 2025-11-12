@@ -85,24 +85,9 @@ public final class ConfigurableRequestAuthenticator implements RequestAuthentica
                     "missing_signature",
                     "Signature header is required when signatures are enabled");
         }
-        var signatureParts = signatureHeader.split(":", 2);
-        if (signatureParts.length != 2) {
-            throw new HttpProblem(
-                    400,
-                    ErrorResponse.ErrorType.INVALID_REQUEST,
-                    "invalid_signature",
-                    "Signature header MUST be in keyId:signature format");
-        }
-        var keyId = signatureParts[0].trim();
-        var encodedSignature = signatureParts[1].trim();
-        var signingKey = configuration.signingKeys().get(keyId);
-        if (signingKey == null) {
-            throw new HttpProblem(
-                    400,
-                    ErrorResponse.ErrorType.INVALID_REQUEST,
-                    "unknown_signature_key",
-                    "Signature key id is not recognized");
-        }
+        var signingContext = resolveSigningContext(signatureHeader);
+        var signingKey = signingContext.signingKey();
+        var encodedSignature = signingContext.encodedSignature();
         var canonicalJson = CanonicalJson.canonicalize(body);
         var payload = (timestampHeader + "." + canonicalJson).getBytes(StandardCharsets.UTF_8);
         var providedSignature = decodeSignature(encodedSignature);
@@ -122,6 +107,48 @@ public final class ConfigurableRequestAuthenticator implements RequestAuthentica
                     providedSignature);
             case ED25519 -> verifyEd25519((SecurityConfiguration.SigningKey.Ed25519) signingKey, payload, providedSignature);
         };
+    }
+
+    private SigningContext resolveSigningContext(String signatureHeader) {
+        var trimmed = signatureHeader.trim();
+        if (trimmed.isEmpty()) {
+            throw new HttpProblem(
+                    400,
+                    ErrorResponse.ErrorType.INVALID_REQUEST,
+                    "invalid_signature",
+                    "Signature header MUST be non-blank");
+        }
+        var signingKeys = configuration.signingKeys();
+        var colonIndex = trimmed.indexOf(':');
+        if (colonIndex < 0) {
+            if (signingKeys.size() != 1) {
+                throw new HttpProblem(
+                        400,
+                        ErrorResponse.ErrorType.INVALID_REQUEST,
+                        "missing_signature_key",
+                        "Signature header MUST include keyId:signature when multiple signing keys are configured");
+            }
+            var entry = signingKeys.entrySet().iterator().next();
+            return new SigningContext(entry.getValue(), trimmed);
+        }
+        var keyId = trimmed.substring(0, colonIndex).trim();
+        var encodedSignature = trimmed.substring(colonIndex + 1).trim();
+        if (keyId.isEmpty() || encodedSignature.isEmpty()) {
+            throw new HttpProblem(
+                    400,
+                    ErrorResponse.ErrorType.INVALID_REQUEST,
+                    "invalid_signature",
+                    "Signature header MUST be in keyId:signature form");
+        }
+        var signingKey = signingKeys.get(keyId);
+        if (signingKey == null) {
+            throw new HttpProblem(
+                    400,
+                    ErrorResponse.ErrorType.INVALID_REQUEST,
+                    "unknown_signature_key",
+                    "Signature key id is not recognized");
+        }
+        return new SigningContext(signingKey, encodedSignature);
     }
 
     private String extractBearerToken(HttpServletRequest request) {
@@ -184,5 +211,8 @@ public final class ConfigurableRequestAuthenticator implements RequestAuthentica
         } catch (GeneralSecurityException e) {
             throw new IllegalStateException("Failed to verify signature", e);
         }
+    }
+
+    private record SigningContext(SecurityConfiguration.SigningKey signingKey, String encodedSignature) {
     }
 }
