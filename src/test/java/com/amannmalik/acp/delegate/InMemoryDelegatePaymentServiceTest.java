@@ -1,6 +1,7 @@
 package com.amannmalik.acp.delegate;
 
 import com.amannmalik.acp.api.checkout.model.Address;
+import com.amannmalik.acp.api.checkout.model.CheckoutSessionId;
 import com.amannmalik.acp.api.delegatepayment.*;
 import com.amannmalik.acp.api.delegatepayment.model.*;
 import com.amannmalik.acp.api.shared.CurrencyCode;
@@ -11,8 +12,7 @@ import java.time.*;
 import java.util.List;
 import java.util.Map;
 
-import static org.junit.jupiter.api.Assertions.assertEquals;
-import static org.junit.jupiter.api.Assertions.assertThrows;
+import static org.junit.jupiter.api.Assertions.*;
 
 final class InMemoryDelegatePaymentServiceTest {
     private static final Clock CLOCK = Clock.fixed(Instant.parse("2025-11-10T00:00:00Z"), ZoneOffset.UTC);
@@ -92,5 +92,62 @@ final class InMemoryDelegatePaymentServiceTest {
         assertThrows(
                 DelegatePaymentValidationException.class,
                 () -> service.create(request(Instant.parse("2025-11-11T00:00:00Z"), 0L), null));
+    }
+
+    @Test
+    void reserveAllowsSingleCommit() {
+        var service = new InMemoryDelegatePaymentService(CLOCK);
+        var delegateRequest = request(Instant.parse("2025-11-11T00:00:00Z"), 3_000L);
+        var response = service.create(delegateRequest, "reserve-single");
+        try (var reservation = service.reserve(
+                response.id(),
+                new CheckoutSessionId("csn_123"),
+                new MinorUnitAmount(1_500L),
+                new CurrencyCode("usd"))) {
+            reservation.commit();
+        }
+        assertThrows(DelegatePaymentTokenException.class, () -> service.reserve(
+                response.id(),
+                new CheckoutSessionId("csn_123"),
+                new MinorUnitAmount(500L),
+                new CurrencyCode("usd")));
+    }
+
+    @Test
+    void reservationIsReleasedWhenNotCommitted() {
+        var service = new InMemoryDelegatePaymentService(CLOCK);
+        var delegateRequest = request(Instant.parse("2025-11-11T00:00:00Z"), 3_000L);
+        var response = service.create(delegateRequest, "reserve-release");
+        try (var reservation = service.reserve(
+                response.id(),
+                new CheckoutSessionId("csn_123"),
+                new MinorUnitAmount(1_000L),
+                new CurrencyCode("usd"))) {
+            assertNotNull(reservation);
+            // Intentionally do not commit to simulate a failed checkout
+        }
+        assertDoesNotThrow(() -> {
+            try (var reservation = service.reserve(
+                    response.id(),
+                    new CheckoutSessionId("csn_123"),
+                    new MinorUnitAmount(1_000L),
+                    new CurrencyCode("usd"))) {
+                reservation.commit();
+            }
+        });
+    }
+
+    @Test
+    void reserveRejectsWhenAllowanceExceeded() {
+        var service = new InMemoryDelegatePaymentService(CLOCK);
+        var delegateRequest = request(Instant.parse("2025-11-11T00:00:00Z"), 2_000L);
+        var response = service.create(delegateRequest, "reserve-exceeded");
+        var exception = assertThrows(DelegatePaymentTokenException.class, () -> service.reserve(
+                response.id(),
+                new CheckoutSessionId("csn_123"),
+                new MinorUnitAmount(2_500L),
+                new CurrencyCode("usd")));
+        assertEquals("allowance_exceeded", exception.code());
+        assertEquals("$.payment_data.token", exception.param());
     }
 }

@@ -1,6 +1,9 @@
 package com.amannmalik.acp.api.checkout;
 
 import com.amannmalik.acp.api.checkout.model.*;
+import com.amannmalik.acp.api.delegatepayment.DelegatePaymentTokenException;
+import com.amannmalik.acp.api.delegatepayment.DelegatePaymentTokenValidator;
+import com.amannmalik.acp.api.delegatepayment.DelegatePaymentTokenValidator.TokenReservation;
 import com.amannmalik.acp.api.shared.CurrencyCode;
 import com.amannmalik.acp.api.shared.MinorUnitAmount;
 import com.amannmalik.acp.spi.webhook.OrderWebhookEvent;
@@ -41,17 +44,30 @@ public final class InMemoryCheckoutSessionService implements CheckoutSessionServ
     private final Clock clock;
     private final CurrencyCode currency;
     private final OrderWebhookPublisher webhookPublisher;
-
+    private final DelegatePaymentTokenValidator tokenValidator;
     public InMemoryCheckoutSessionService(Map<String, Long> priceBook, Clock clock, CurrencyCode currency) {
-        this(priceBook, clock, currency, OrderWebhookPublisher.NOOP);
+        this(priceBook, clock, currency, OrderWebhookPublisher.NOOP, DelegatePaymentTokenValidator.NOOP);
     }
 
     public InMemoryCheckoutSessionService(
-            Map<String, Long> priceBook, Clock clock, CurrencyCode currency, OrderWebhookPublisher webhookPublisher) {
+            Map<String, Long> priceBook,
+            Clock clock,
+            CurrencyCode currency,
+            OrderWebhookPublisher webhookPublisher) {
+        this(priceBook, clock, currency, webhookPublisher, DelegatePaymentTokenValidator.NOOP);
+    }
+
+    public InMemoryCheckoutSessionService(
+            Map<String, Long> priceBook,
+            Clock clock,
+            CurrencyCode currency,
+            OrderWebhookPublisher webhookPublisher,
+            DelegatePaymentTokenValidator tokenValidator) {
         this.priceBook = validatePriceBook(priceBook);
         this.clock = Objects.requireNonNullElse(clock, Clock.systemUTC());
         this.currency = currency == null ? new CurrencyCode("usd") : currency;
         this.webhookPublisher = webhookPublisher == null ? OrderWebhookPublisher.NOOP : webhookPublisher;
+        this.tokenValidator = tokenValidator == null ? DelegatePaymentTokenValidator.NOOP : tokenValidator;
     }
 
     public InMemoryCheckoutSessionService() {
@@ -68,6 +84,13 @@ public final class InMemoryCheckoutSessionService implements CheckoutSessionServ
 
     public InMemoryCheckoutSessionService(CurrencyCode currency, OrderWebhookPublisher webhookPublisher) {
         this(defaultPriceBook(), Clock.systemUTC(), currency, webhookPublisher);
+    }
+
+    public InMemoryCheckoutSessionService(
+            CurrencyCode currency,
+            OrderWebhookPublisher webhookPublisher,
+            DelegatePaymentTokenValidator tokenValidator) {
+        this(defaultPriceBook(), Clock.systemUTC(), currency, webhookPublisher, tokenValidator);
     }
 
     private static List<Item> extractItems(CheckoutSession session) {
@@ -494,21 +517,42 @@ public final class InMemoryCheckoutSessionService implements CheckoutSessionServ
                         : readiness.missing().getFirst().param();
                 throw new CheckoutSessionValidationException(message, "session_not_ready", param);
             }
-            var buyer = request.buyer() != null ? request.buyer() : current.buyer();
-            var orderId = nextOrderId();
-            var order = new Order(orderId, id, URI.create("https://merchant.example.com/orders/" + orderId));
-            var updated = assemble(
-                    id,
-                    buyer,
-                    current.fulfillmentAddress(),
-                    current.fulfillmentOptionId(),
-                    extractItems(current),
-                    StatusOverride.COMPLETED,
-                    order);
-            publishOrderCreated(updated);
-            publishOrderUpdate(updated, OrderWebhookEvent.OrderStatus.CONFIRMED, List.of());
-            return updated;
+            try (var reservation = reserveDelegatedToken(request, id, current)) {
+                var buyer = request.buyer() != null ? request.buyer() : current.buyer();
+                var orderId = nextOrderId();
+                var order = new Order(orderId, id, URI.create("https://merchant.example.com/orders/" + orderId));
+                var updated = assemble(
+                        id,
+                        buyer,
+                        current.fulfillmentAddress(),
+                        current.fulfillmentOptionId(),
+                        extractItems(current),
+                        StatusOverride.COMPLETED,
+                        order);
+                reservation.commit();
+                publishOrderCreated(updated);
+                publishOrderUpdate(updated, OrderWebhookEvent.OrderStatus.CONFIRMED, List.of());
+                return updated;
+            }
         });
+    }
+
+    private TokenReservation reserveDelegatedToken(
+            CheckoutSessionCompleteRequest request, CheckoutSessionId id, CheckoutSession current) {
+        try {
+            var total = resolveGrandTotal(current.totals());
+            return tokenValidator.reserve(request.paymentData().token(), id, total, currency);
+        } catch (DelegatePaymentTokenException e) {
+            throw new CheckoutSessionValidationException(e.getMessage(), e.code(), e.param(), HTTP_BAD_REQUEST);
+        }
+    }
+
+    private MinorUnitAmount resolveGrandTotal(List<Total> totals) {
+        return totals.stream()
+                .filter(total -> total.type() == Total.TotalType.TOTAL)
+                .map(Total::amount)
+                .findFirst()
+                .orElseThrow(() -> new IllegalStateException("checkout_session.totals missing TOTAL entry"));
     }
 
     private void publishOrderCreated(CheckoutSession session) {

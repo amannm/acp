@@ -96,10 +96,11 @@ public final class ServeCommand implements Callable<Integer> {
         var priceBook = parsePriceOverrides();
         var orderPublisher = webhookPublisher();
         var currency = new CurrencyCode(currencyCode);
-        var checkoutService = priceBook.isEmpty()
-                ? new InMemoryCheckoutSessionService(currency, orderPublisher)
-                : new InMemoryCheckoutSessionService(priceBook, Clock.systemUTC(), currency, orderPublisher);
         var delegatePaymentService = new InMemoryDelegatePaymentService();
+        var checkoutService = priceBook.isEmpty()
+                ? new InMemoryCheckoutSessionService(currency, orderPublisher, delegatePaymentService)
+                : new InMemoryCheckoutSessionService(
+                        priceBook, Clock.systemUTC(), currency, orderPublisher, delegatePaymentService);
         var authenticator = authenticator();
         var serverConfig = serverConfiguration();
         try (var server = new JettyHttpServer(serverConfig, checkoutService, delegatePaymentService, authenticator)) {
