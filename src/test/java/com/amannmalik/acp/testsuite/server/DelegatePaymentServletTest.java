@@ -93,6 +93,16 @@ final class DelegatePaymentServletTest {
         return new JettyHttpServer(JettyHttpServer.Configuration.httpsOnly(tlsConfiguration), checkout, delegate, authenticator);
     }
 
+    private static JettyHttpServer newHttpServer(
+            int port,
+            SecurityConfiguration securityConfiguration,
+            Clock clock) {
+        var checkout = new InMemoryCheckoutSessionService();
+        var delegate = new InMemoryDelegatePaymentService();
+        var authenticator = new ConfigurableRequestAuthenticator(securityConfiguration, clock);
+        return new JettyHttpServer(JettyHttpServer.Configuration.httpOnly(port), checkout, delegate, authenticator);
+    }
+
     private static SecurityConfiguration defaultSecurityConfiguration() {
         return new SecurityConfiguration(
                 Set.of("test"),
@@ -114,6 +124,21 @@ final class DelegatePaymentServletTest {
             var json = Json.createReader(new StringReader(response.body())).readObject();
             assertTrue(json.containsKey("id"));
             assertTrue(json.getJsonObject("metadata").containsKey("merchant_id"));
+        }
+    }
+
+    @Test
+    void plainHttpDelegatePaymentRequestsAreRejected() throws Exception {
+        try (var server = newHttpServer(0, defaultSecurityConfiguration(), Clock.systemUTC())) {
+            server.start();
+            var client = HttpClient.newHttpClient();
+            var baseUri = URI.create("http://localhost:" + server.httpPort());
+            var response = sendDelegatePaymentRequest(client, baseUri, "idem_http_delegate", VALID_REQUEST_BODY);
+
+            assertEquals(400, response.statusCode());
+            var error = Json.createReader(new StringReader(response.body())).readObject();
+            assertEquals("invalid_request", error.getString("type"));
+            assertEquals("https_required", error.getString("code"));
         }
     }
 

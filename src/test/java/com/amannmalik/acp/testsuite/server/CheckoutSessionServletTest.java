@@ -37,6 +37,16 @@ final class CheckoutSessionServletTest {
         return new JettyHttpServer(JettyHttpServer.Configuration.httpsOnly(tlsConfiguration), checkout, delegate, authenticator);
     }
 
+    private static JettyHttpServer newHttpServer(
+            int port,
+            SecurityConfiguration securityConfiguration,
+            Clock clock) {
+        var checkout = new InMemoryCheckoutSessionService();
+        var delegate = new InMemoryDelegatePaymentService();
+        var authenticator = new ConfigurableRequestAuthenticator(securityConfiguration, clock);
+        return new JettyHttpServer(JettyHttpServer.Configuration.httpOnly(port), checkout, delegate, authenticator);
+    }
+
     private static SecurityConfiguration defaultSecurityConfiguration() {
         return new SecurityConfiguration(
                 Set.of("test"),
@@ -150,6 +160,28 @@ final class CheckoutSessionServletTest {
     }
 
     @Test
+    void plainHttpRequestsAreRejected() throws Exception {
+        try (var server = newHttpServer(0, defaultSecurityConfiguration(), Clock.systemUTC())) {
+            server.start();
+            var client = HttpClient.newHttpClient();
+            var baseUri = URI.create("http://localhost:" + server.httpPort());
+            var response = sendCreateRequest(
+                    client,
+                    baseUri,
+                    """
+                            {"items":[{"id":"item_123","quantity":1}]}
+                            """,
+                    "idem-http-reject",
+                    "req-http-1");
+
+            assertEquals(400, response.statusCode());
+            var error = json(response.body());
+            assertEquals("invalid_request", error.getString("type"));
+            assertEquals("https_required", error.getString("code"));
+        }
+    }
+
+    @Test
     void createRejectsFulfillmentAddressWithoutState() throws Exception {
         try (var tls = TlsTestSupport.createTlsContext();
              var server = newServer(tls.configuration())) {
@@ -183,7 +215,7 @@ final class CheckoutSessionServletTest {
     }
 
     @Test
-    void createIdempotencyConflictUsesRequestNotIdempotentErrorType() throws Exception {
+    void createIdempotencyConflictUsesInvalidRequestErrorType() throws Exception {
         try (var tls = TlsTestSupport.createTlsContext();
              var server = newServer(tls.configuration())) {
             server.start();
@@ -211,7 +243,7 @@ final class CheckoutSessionServletTest {
 
             assertEquals(409, conflictResponse.statusCode());
             var error = json(conflictResponse.body());
-            assertEquals("request_not_idempotent", error.getString("type"));
+            assertEquals("invalid_request", error.getString("type"));
             assertEquals("idempotency_conflict", error.getString("code"));
         }
     }
@@ -260,7 +292,7 @@ final class CheckoutSessionServletTest {
 
             assertEquals(409, second.statusCode());
             var errorJson = Json.createReader(new StringReader(second.body())).readObject();
-            assertEquals("request_not_idempotent", errorJson.getString("type"));
+            assertEquals("invalid_request", errorJson.getString("type"));
             assertEquals("idempotency_conflict", errorJson.getString("code"));
         }
     }
@@ -386,7 +418,7 @@ final class CheckoutSessionServletTest {
 
             assertEquals(409, second.statusCode());
             var errorJson = json(second.body());
-            assertEquals("request_not_idempotent", errorJson.getString("type"));
+            assertEquals("invalid_request", errorJson.getString("type"));
             assertEquals("idempotency_conflict", errorJson.getString("code"));
         }
     }

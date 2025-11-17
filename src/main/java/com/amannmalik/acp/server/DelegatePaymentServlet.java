@@ -83,6 +83,13 @@ public final class DelegatePaymentServlet extends HttpServlet {
                     "unsupported_api_version",
                     "API-Version MUST equal %s".formatted(ApiVersion.SUPPORTED));
         }
+        if (!req.isSecure()) {
+            throw new HttpProblem(
+                    HttpServletResponse.SC_BAD_REQUEST,
+                    ErrorResponse.ErrorType.INVALID_REQUEST,
+                    "https_required",
+                    "HTTPS is required");
+        }
         var authorization = req.getHeader("Authorization");
         if (authorization == null || authorization.isBlank()) {
             throw new HttpProblem(
