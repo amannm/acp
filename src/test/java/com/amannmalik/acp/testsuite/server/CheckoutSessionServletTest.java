@@ -150,6 +150,73 @@ final class CheckoutSessionServletTest {
     }
 
     @Test
+    void createRejectsFulfillmentAddressWithoutState() throws Exception {
+        try (var tls = TlsTestSupport.createTlsContext();
+             var server = newServer(tls.configuration())) {
+            server.start();
+            var client = HttpClient.newBuilder().sslContext(tls.sslContext()).build();
+            var baseUri = URI.create("https://localhost:" + server.httpsPort());
+            var response = sendCreateRequest(
+                    client,
+                    baseUri,
+                    """
+                            {
+                              "items":[{"id":"item_123","quantity":1}],
+                              "fulfillment_address":{
+                                "name":"Jane Doe",
+                                "line_one":"1234 Chat Road",
+                                "city":"San Francisco",
+                                "country":"US",
+                                "postal_code":"94131"
+                              }
+                            }
+                            """,
+                    "idem-missing-state",
+                    "req-missing-state");
+
+            assertEquals(400, response.statusCode());
+            var error = json(response.body());
+            assertEquals("invalid_request", error.getString("type"));
+            assertEquals("invalid_request", error.getString("code"));
+            assertTrue(error.getString("message").contains("state"));
+        }
+    }
+
+    @Test
+    void createIdempotencyConflictUsesRequestNotIdempotentErrorType() throws Exception {
+        try (var tls = TlsTestSupport.createTlsContext();
+             var server = newServer(tls.configuration())) {
+            server.start();
+            var client = HttpClient.newBuilder().sslContext(tls.sslContext()).build();
+            var baseUri = URI.create("https://localhost:" + server.httpsPort());
+            var idemKey = "idem-conflict-type";
+            var firstResponse = sendCreateRequest(
+                    client,
+                    baseUri,
+                    """
+                            {"items":[{"id":"item_123","quantity":1}]}
+                            """,
+                    idemKey,
+                    "req-conflict-1");
+            assertEquals(201, firstResponse.statusCode());
+
+            var conflictResponse = sendCreateRequest(
+                    client,
+                    baseUri,
+                    """
+                            {"items":[{"id":"item_456","quantity":1}]}
+                            """,
+                    idemKey,
+                    "req-conflict-2");
+
+            assertEquals(409, conflictResponse.statusCode());
+            var error = json(conflictResponse.body());
+            assertEquals("request_not_idempotent", error.getString("type"));
+            assertEquals("idempotency_conflict", error.getString("code"));
+        }
+    }
+
+    @Test
     void createIdempotencyReturnsExistingSessionState() throws Exception {
         try (var tls = TlsTestSupport.createTlsContext();
              var server = newServer(tls.configuration())) {
@@ -193,7 +260,7 @@ final class CheckoutSessionServletTest {
 
             assertEquals(409, second.statusCode());
             var errorJson = Json.createReader(new StringReader(second.body())).readObject();
-            assertEquals("invalid_request", errorJson.getString("type"));
+            assertEquals("request_not_idempotent", errorJson.getString("type"));
             assertEquals("idempotency_conflict", errorJson.getString("code"));
         }
     }
@@ -319,7 +386,7 @@ final class CheckoutSessionServletTest {
 
             assertEquals(409, second.statusCode());
             var errorJson = json(second.body());
-            assertEquals("invalid_request", errorJson.getString("type"));
+            assertEquals("request_not_idempotent", errorJson.getString("type"));
             assertEquals("idempotency_conflict", errorJson.getString("code"));
         }
     }

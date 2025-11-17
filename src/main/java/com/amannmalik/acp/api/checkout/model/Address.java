@@ -41,13 +41,7 @@ public record Address(
     }
 
     private static String normalizeState(String value) {
-        if (value == null) {
-            return null;
-        }
-        var trimmed = value.trim();
-        if (trimmed.isEmpty()) {
-            throw new IllegalArgumentException("address.state MUST be non-blank when provided");
-        }
+        var trimmed = Ensure.nonBlank("address.state", value).trim();
         ensureMaxLength("address.state", trimmed, LINE_MAX);
         return trimmed;
     }

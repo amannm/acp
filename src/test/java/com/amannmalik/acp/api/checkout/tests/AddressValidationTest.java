@@ -71,8 +71,8 @@ final class AddressValidationTest {
     }
 
     @Test
-    void allowsMissingState() {
-        assertDoesNotThrow(() -> new Address(
+    void rejectsMissingState() {
+        assertThrows(IllegalArgumentException.class, () -> new Address(
                 "Name",
                 "Line 1",
                 null,
@@ -83,7 +83,7 @@ final class AddressValidationTest {
     }
 
     @Test
-    void rejectsBlankStateWhenProvided() {
+    void rejectsBlankState() {
         assertThrows(IllegalArgumentException.class, () -> new Address(
                 "Name",
                 "Line 1",

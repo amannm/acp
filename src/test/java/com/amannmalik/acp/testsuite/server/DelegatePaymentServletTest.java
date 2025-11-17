@@ -118,6 +118,57 @@ final class DelegatePaymentServletTest {
     }
 
     @Test
+    void billingAddressWithoutStateReturns400() throws Exception {
+        try (var tls = TlsTestSupport.createTlsContext();
+             var server = newServer(tls.configuration())) {
+            server.start();
+            var client = HttpClient.newBuilder().sslContext(tls.sslContext()).build();
+            var body = """
+                    {
+                      "payment_method": {
+                        "type": "card",
+                        "card_number_type": "fpan",
+                        "virtual": false,
+                        "number": "4242424242424242",
+                        "exp_month": "11",
+                        "exp_year": "2026",
+                        "display_card_funding_type": "credit",
+                        "metadata": {"issuer": "demo"}
+                      },
+                      "allowance": {
+                        "reason": "one_time",
+                        "max_amount": 2000,
+                        "currency": "usd",
+                        "checkout_session_id": "csn_state",
+                        "merchant_id": "acme",
+                        "expires_at": "2030-01-01T00:00:00Z"
+                      },
+                      "billing_address": {
+                        "name": "Jane Doe",
+                        "line_one": "123 Main St",
+                        "city": "San Francisco",
+                        "country": "US",
+                        "postal_code": "94102"
+                      },
+                      "risk_signals": [
+                        {"type": "card_testing", "score": 1, "action": "authorized"}
+                      ],
+                      "metadata": {"source": "test"}
+                    }
+                    """;
+
+            var response = sendDelegatePaymentRequest(
+                    client, serverBaseUri(server), "idem-missing-state", body);
+
+            assertEquals(400, response.statusCode());
+            var errorJson = Json.createReader(new StringReader(response.body())).readObject();
+            assertEquals("invalid_request", errorJson.getString("type"));
+            assertEquals("invalid_card", errorJson.getString("code"));
+            assertTrue(errorJson.getString("message").toLowerCase(Locale.ROOT).contains("state"));
+        }
+    }
+
+    @Test
     void idempotencyConflictReturns409() throws Exception {
         try (var tls = TlsTestSupport.createTlsContext();
              var server = newServer(tls.configuration())) {

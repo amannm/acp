@@ -67,7 +67,7 @@ final class DelegatePaymentJsonCodecTest {
     }
 
     @Test
-    void readRequest_allowsMissingBillingAddressState() throws Exception {
+    void readRequest_requiresBillingAddressStateWhenProvided() throws Exception {
         var examples = readExamples("specification/2025-09-29/examples/examples.delegate_payment.json");
         var requestJson = examples.getJsonObject("delegate_payment_request");
         var billingWithoutState = Json.createObjectBuilder();
@@ -80,8 +80,6 @@ final class DelegatePaymentJsonCodecTest {
                 .add("billing_address", billingWithoutState.build())
                 .build();
         var codec = new DelegatePaymentJsonCodec();
-        var request = codec.readRequest(jsonBytes(requestWithoutState));
-        assertNotNull(request.billingAddress());
-        assertNull(request.billingAddress().state());
+        assertThrows(JsonDecodingException.class, () -> codec.readRequest(jsonBytes(requestWithoutState)));
     }
 }

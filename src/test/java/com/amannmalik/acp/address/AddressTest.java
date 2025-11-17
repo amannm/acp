@@ -18,9 +18,9 @@ final class AddressTest {
     }
 
     @Test
-    void stateMayBeOmitted() {
-        var address = buildAddress(null, "us");
-        assertNull(address.state());
+    void stateIsTrimmed() {
+        var address = buildAddress("  CA  ", "us");
+        assertEquals("CA", address.state());
     }
 
     @Test
