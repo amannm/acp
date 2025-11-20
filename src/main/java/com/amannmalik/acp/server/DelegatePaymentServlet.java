@@ -123,7 +123,7 @@ public final class DelegatePaymentServlet extends HttpServlet {
             sendError(
                     resp,
                     HttpServletResponse.SC_CONFLICT,
-                    ErrorResponse.ErrorType.INVALID_REQUEST,
+                    ErrorResponse.ErrorType.REQUEST_NOT_IDEMPOTENT,
                     "idempotency_conflict",
                     e.getMessage(),
                     null,

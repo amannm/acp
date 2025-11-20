@@ -243,7 +243,7 @@ final class CheckoutSessionServletTest {
 
             assertEquals(409, conflictResponse.statusCode());
             var error = json(conflictResponse.body());
-            assertEquals("invalid_request", error.getString("type"));
+            assertEquals("request_not_idempotent", error.getString("type"));
             assertEquals("idempotency_conflict", error.getString("code"));
         }
     }
@@ -292,7 +292,7 @@ final class CheckoutSessionServletTest {
 
             assertEquals(409, second.statusCode());
             var errorJson = Json.createReader(new StringReader(second.body())).readObject();
-            assertEquals("invalid_request", errorJson.getString("type"));
+            assertEquals("request_not_idempotent", errorJson.getString("type"));
             assertEquals("idempotency_conflict", errorJson.getString("code"));
         }
     }
@@ -418,7 +418,7 @@ final class CheckoutSessionServletTest {
 
             assertEquals(409, second.statusCode());
             var errorJson = json(second.body());
-            assertEquals("invalid_request", errorJson.getString("type"));
+            assertEquals("request_not_idempotent", errorJson.getString("type"));
             assertEquals("idempotency_conflict", errorJson.getString("code"));
         }
     }
@@ -536,7 +536,7 @@ final class CheckoutSessionServletTest {
                     "req-missing-idem-create");
             assertEquals(400, response.statusCode());
             var errorJson = json(response.body());
-            assertEquals("invalid_request", errorJson.getString("type"));
+            assertEquals("request_not_idempotent", errorJson.getString("type"));
             assertEquals("missing_idempotency_key", errorJson.getString("code"));
         }
     }
@@ -570,7 +570,7 @@ final class CheckoutSessionServletTest {
             var response = client.send(request, HttpResponse.BodyHandlers.ofString());
             assertEquals(400, response.statusCode());
             var errorJson = json(response.body());
-            assertEquals("invalid_request", errorJson.getString("type"));
+            assertEquals("request_not_idempotent", errorJson.getString("type"));
             assertEquals("missing_idempotency_key", errorJson.getString("code"));
         }
     }

@@ -178,7 +178,7 @@ public final class CheckoutSessionServlet extends HttpServlet {
         if (idemKey == null) {
             throw new HttpProblem(
                     HttpServletResponse.SC_BAD_REQUEST,
-                    ErrorResponse.ErrorType.INVALID_REQUEST,
+                    ErrorResponse.ErrorType.REQUEST_NOT_IDEMPOTENT,
                     "missing_idempotency_key",
                     "Idempotency-Key is required for this endpoint");
         }
@@ -217,7 +217,7 @@ public final class CheckoutSessionServlet extends HttpServlet {
             sendError(
                     resp,
                     HttpServletResponse.SC_CONFLICT,
-                    ErrorResponse.ErrorType.INVALID_REQUEST,
+                    ErrorResponse.ErrorType.REQUEST_NOT_IDEMPOTENT,
                     "idempotency_conflict",
                     e.getMessage(),
                     null,
@@ -226,7 +226,7 @@ public final class CheckoutSessionServlet extends HttpServlet {
             sendError(
                     resp,
                     e.status(),
-                    ErrorResponse.ErrorType.INVALID_REQUEST,
+                    validationErrorType(e),
                     e.code(),
                     e.getMessage(),
                     e.param(),
@@ -270,6 +270,13 @@ public final class CheckoutSessionServlet extends HttpServlet {
                     null,
                     req);
         }
+    }
+
+    private ErrorResponse.ErrorType validationErrorType(CheckoutSessionValidationException e) {
+        return switch (e.code()) {
+            case "missing_idempotency_key", "idempotency_conflict" -> ErrorResponse.ErrorType.REQUEST_NOT_IDEMPOTENT;
+            default -> ErrorResponse.ErrorType.INVALID_REQUEST;
+        };
     }
 
     private void sendError(
